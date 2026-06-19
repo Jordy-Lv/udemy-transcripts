@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Salidas de transcripciones (por si alguien las genera dentro del repo)
+*.txt
+!requirements.txt
+Udemy-Transcripts/
