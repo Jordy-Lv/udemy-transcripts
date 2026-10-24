@@ -2,12 +2,21 @@
 
 import json
 import os
+import re
+from collections import namedtuple
 from pathlib import Path
 
 from .util import fs_path
 
 MANIFEST_NAME = ".udemy-transcripts.json"
 VERSION = 1
+
+_SECTION_DIR = re.compile(r"(\d+) - ")
+_LECTURE_FILE = re.compile(r"(\d+) - (.*)\.(?:md|txt)$")
+
+# Una lección ya escrita en disco: índice y carpeta de su sección, entrada del manifest,
+# número y título sacados del nombre del archivo, ruta relativa y ruta absoluta.
+Downloaded = namedtuple("Downloaded", "section_index dirname entry number name rel path")
 
 
 def caption_signature(caption):
@@ -66,6 +75,22 @@ class Manifest:
             and entry.get("title") == lecture.title
             and entry.get("section") == section.title
             and fs_path(Path(course_dir) / rel_path).is_file())
+
+    def downloaded(self, course_dir):
+        """Las lecciones apuntadas cuyo archivo `NN - sección/NNN - título.ext` está en disco."""
+        found = []
+        for entry in self.entries.values():
+            rel = entry.get("file") or ""
+            parts = rel.split("/")
+            if len(parts) != 2:
+                continue
+            dirname, name = parts
+            m, n = _SECTION_DIR.match(dirname), _LECTURE_FILE.match(name)
+            path = fs_path(Path(course_dir) / rel)
+            if m and n and path.is_file():
+                found.append(Downloaded(int(m.group(1)), dirname, entry, n.group(1), n.group(2),
+                                        rel, path))
+        return found
 
     # ---- recursos ------------------------------------------------------
     def resource_done(self, resource_id, rel_path, course_dir):

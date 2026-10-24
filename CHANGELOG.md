@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.0 — Curso unificado y menú interactivo
+
+### Novedades
+- **`--merge`**: además de la carpeta por lecciones, escribe `<curso>.md` con **todo el curso en un solo
+  Markdown**, pensado para NotebookLM y Notion (que no aceptan carpetas). Se construye desde lo descargado
+  (manifest + archivos), así que funciona con `--update` y `--study` y no pierde nada si se interrumpe.
+  Sin cabeceras YAML, sin enlaces a rutas locales (adjuntos e imágenes quedan como texto) y con marcas de
+  tiempo sin URL. Si supera `--merge-words` (default 400 000, NotebookLM admite ~500 000) se divide por
+  secciones en `<curso> (parte N de M).md`.
+- **`--merge-from CARPETA`**: unifica un curso ya descargado sin abrir el navegador (respeta `--sections` y
+  `--lectures`). Se rechaza combinado con `--single`, `--txt` o `--format txt`.
+- **Menú interactivo** (`udemy` sin argumentos en una terminal, o `udemy --menu`): flechas + Enter + Esc;
+  pide las URLs, ofrece submenús (formato, idiomas, recursos, selección, estudio con IA, solo novedades),
+  lista tus cursos, actualiza/unifica cursos ya descargados y tiene ajustes (carpeta, Business, idioma,
+  token solo en la sesión). Muestra el comando equivalente. Sin teclas especiales cae a modo numérico.
+- **Lanzadores de Windows**: `udemy-menu.ps1` (desde el repositorio), `udemy-menu.cmd` y un acceso directo
+  «Udemy Transcripts» en el Menú Inicio creados por `install.ps1` (`-DesktopShortcut` añade uno al Escritorio;
+  `-Uninstall` los borra).
+
+### Interno
+- `Manifest.downloaded()` (lecciones apuntadas con su archivo en disco) compartido por `study` y `merge`.
+- `cli.open_client()` (navegador + login) y `print_courses()` extraídos de `run()`.
+- Módulos nuevos: `merge.py`, `tui.py`, `menu.py`.
+
+### Sin verificar
+- El menú se probó con teclas simuladas y su primer render en PowerShell; falta uso prolongado en consolas
+  distintas (cmd.exe clásico, macOS/Linux). El archivo unificado no se ha subido todavía a NotebookLM.
+
 ## 1.0.0 — Fase 6: bilingüe, instaladores y pulido (plan completado)
 
 ### Novedades

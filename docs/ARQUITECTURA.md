@@ -1,6 +1,6 @@
 # Arquitectura de udemy-transcripts
 
-> Estado: **1.0.0 (plan completado)**. El diseño original de un solo script (`9a21915`) se reorganizó
+> Estado: **1.1.0**. El diseño original de un solo script (`9a21915`) se reorganizó
 > en un paquete; el plan de cambios está en [PLAN.md](PLAN.md) y la API en [API.md](API.md).
 
 ## Estructura
@@ -17,6 +17,9 @@ udemy_transcripts/
   resources.py    adjuntos: nombres, plan con tamaños, confirmación, descarga atómica, imágenes
   study.py        --study: secciones de lo descargado, prompts, caché, estimación de coste, resumen y CSV de Anki
   ai.py           backend de la API de Claude (salida estructurada, fallback, errores); el SDK es opcional
+  merge.py        --merge/--merge-from: lecciones descargadas → un .md (o partes) limpio para NotebookLM/Notion
+  tui.py          Console: listas con flechas, texto y respaldo numérico; teclas inyectables (msvcrt/termios)
+  menu.py         menú interactivo: arma los argumentos del CLI y llama a cli.main (Settings, Choices, build_argv)
   paths.py        rutas de aprendizaje (Business): cursos de la ruta e índice
   captions.py     parser WebVTT por bloques → Cue(start, end, text); elección de idioma y de la 2.ª pista (--lang es+en)
   paragraphs.py   cues → párrafos (pausa 2,5 s / ~400 car.), marcas de tiempo y alineación de la 2.ª lengua
@@ -46,8 +49,13 @@ udemy <url|slug|id> [--format md|txt] [--single] [--update] [--lang] [--out] ...
    ├─ 6. por cada lección de vídeo (download.py):
    │        pick_caption() → ¿vigente en el manifest? (--update) → download_text(.vtt)
    │        → parse_vtt() → build_paragraphs() → render markdown|txt → escribe + manifest.save()
-   └─ 7. guarda  <out>/<curso>/<NN - sección>/<NNN - lección>.md|txt  + README.md + manifest
-                (o <out>/<curso>.md|txt con --single / --txt)
+   ├─ 7. guarda  <out>/<curso>/<NN - sección>/<NNN - lección>.md|txt  + README.md + manifest
+   │            (o <out>/<curso>.md|txt con --single / --txt)
+   └─ 8. --merge: merge_course() relee la carpeta (Manifest.downloaded) y escribe <out>/<curso>.md
+                (o «<curso> (parte N de M).md» si supera --merge-words)
+
+udemy            (sin argumentos, en una terminal) / udemy --menu
+   └─ menu.run_menu → pantallas (tui.Console) → build_argv() → cli.main(argv) por cada URL
 ```
 
 ## Capa de red
@@ -69,7 +77,8 @@ Lo único que no cubren es el navegador real: ver la prueba manual de cada fase 
 ## Límites actuales
 
 1. `--single`/`--txt` escribe el archivo al final: una interrupción pierde lo acumulado, y
-   `--update` no aplica (hace falta el texto de todas las lecciones para recomponerlo).
+   `--update` no aplica (hace falta el texto de todas las lecciones para recomponerlo). `--merge` evita
+   ambos problemas porque se arma desde la carpeta ya escrita (solo Markdown).
 2. `--update` decide por la huella del subtítulo (`file_name` del CDN) sin descargarlo; si Udemy
    cambiara el contenido sin cambiar ese nombre no lo detectaría (el hash del VTT se guarda, pero solo
    como referencia).
@@ -80,3 +89,4 @@ Lo único que no cubren es el navegador real: ver la prueba manual de cada fase 
    descarga falla, la lección sale en un solo idioma (y `--update` lo reintenta porque la huella cambia).
 6. El estudio con IA usa estimaciones (caracteres/3,3 por token); el coste real puede variar. Una sección con
    más de ~100 000 tokens se parte en partes sin una llamada final que las una.
+7. El menú lanza un navegador por cada URL (simple y fiable); una sesión compartida sería más rápida.

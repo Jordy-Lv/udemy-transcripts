@@ -8,10 +8,12 @@ Descarga las **transcripciones (subtítulos)** de todos los videos de un curso d
 - **Estudio con IA** (opcional): `--study` genera un resumen por sección y flashcards listas para **Anki**, con la API de Claude o con prompts para pegar en un chat.
 - **Subtítulos bilingües** (`--lang es+en`): cada párrafo con su traducción alineada por tiempo, útil para aprender inglés técnico.
 - Tres salidas: **un archivo por video**, **todo el curso en un solo archivo** (con tabla de contenidos) o el `.txt` clásico.
+- **`--merge`**: además de la carpeta, un **único `.md` con todo el curso** (se divide en partes si es muy largo), para cargarlo en **NotebookLM** o **Notion**, que no aceptan carpetas.
+- **Menú interactivo** en PowerShell/terminal (`udemy` sin argumentos): te pide las URLs y te deja elegir las opciones con las flechas.
 - **`--update`** descarga solo lo nuevo o cambiado y reanuda una descarga cortada.
 - Usa un navegador real (Playwright) para reutilizar tu sesión y atravesar la protección Cloudflare de Udemy.
 
-**Índice:** [Instalación](#instalación) · [Uso](#uso) · [Recetas](#recetas) · [Dónde se guardan](#dónde-se-guardan) · [Recursos, rangos y rutas](#recursos-rangos-y-rutas-de-aprendizaje) · [Bilingüe](#subtítulos-bilingües) · [Estudio con IA](#estudio-con-ia-resúmenes-y-flashcards) · [Opciones](#opciones) · [Problemas frecuentes](#problemas-frecuentes)
+**Índice:** [Instalación](#instalación) · [Uso](#uso) · [Menú interactivo](#menú-interactivo) · [NotebookLM y Notion](#para-notebooklm-y-notion-un-solo-archivo) · [Recetas](#recetas) · [Dónde se guardan](#dónde-se-guardan) · [Recursos, rangos y rutas](#recursos-rangos-y-rutas-de-aprendizaje) · [Bilingüe](#subtítulos-bilingües) · [Estudio con IA](#estudio-con-ia-resúmenes-y-flashcards) · [Opciones](#opciones) · [Problemas frecuentes](#problemas-frecuentes)
 
 > ⚠️ **Uso responsable:** descarga solo cursos a los que **tú tienes acceso** y úsalo para estudio personal. No redistribuyas el contenido.
 
@@ -48,18 +50,51 @@ El instalador crea un entorno aislado (no toca tu Python del sistema), descarga 
 | `--with-ai` / `-WithAI` | Instala también el SDK de Anthropic (para `--study api`; exige Python 3.10+) |
 | `--skip-browser` / `-SkipBrowser` | No descarga Chromium (ya lo tienes o lo harás luego) |
 | `--uninstall` / `-Uninstall` | Borra el entorno y el comando; **no** toca tus descargas ni tu sesión de Udemy |
+| `-DesktopShortcut` (PowerShell) | Crea además un acceso directo «Udemy Transcripts» en el Escritorio (el del Menú Inicio se crea siempre) |
 | `UDEMY_APP_DIR`, `UDEMY_BIN_DIR` / `-AppDir`, `-BinDir` | Dónde se instala el entorno y el comando |
 
 Para **actualizar**, haz `git pull` y vuelve a ejecutar el instalador. Comprueba la versión con `udemy --version`.
 
 ---
 
+## Menú interactivo
+
+Si prefieres no recordar opciones, ejecuta **`udemy`** sin argumentos (o `udemy --menu`, o el comando
+`udemy-menu`, o el acceso directo **Udemy Transcripts** del Menú Inicio de Windows; desde el repositorio,
+`.\udemy-menu.ps1`):
+
+```
+¿Qué quieres hacer?
+
+❯ Descargar curso(s) por URL
+  Ver mis cursos
+  Actualizar / unificar un curso descargado
+  Ajustes
+  Salir
+```
+
+- **↑ ↓** mueven, **Enter** elige, **Esc** vuelve atrás, **Espacio** marca (listas múltiples).
+- **Descargar:** te pide una o varias URLs (cursos o rutas de aprendizaje) y abre una pantalla de opciones
+  (formato, idiomas, recursos, qué secciones, estudio con IA, solo novedades). Antes de empezar muestra el
+  **comando equivalente** para que puedas repetirlo sin menú.
+- **Ver mis cursos:** lista tu cuenta y descargas los que marques.
+- **Actualizar / unificar:** elige un curso ya descargado y genera el archivo unificado, el material de
+  estudio o busca lecciones nuevas.
+- **Ajustes:** carpeta de salida, organización de Udemy Business, idioma por defecto y token (el token solo
+  vive en la sesión; lo demás se recuerda en `~/.cache/udemy-transcripts-menu.json`).
+- Si tu terminal no admite teclas especiales (o la salida está redirigida) el menú pasa a modo numérico:
+  escribes el número de la opción.
+
+---
+
 ## Uso
 
 ```bash
+udemy                                            # menú interactivo
 udemy --list                                     # lista tus cursos y su id
 udemy "https://www.udemy.com/course/mi-curso/"   # Markdown: un .md por video + README.md índice
 udemy --single "https://www.udemy.com/course/mi-curso/"   # todo el curso en un solo .md
+udemy --merge "https://www.udemy.com/course/mi-curso/"    # carpeta + un .md unificado (NotebookLM, Notion)
 udemy --format txt "https://www.udemy.com/course/mi-curso/"   # texto plano, un .txt por video
 udemy --update "https://www.udemy.com/course/mi-curso/"   # solo lo nuevo o cambiado
 udemy --resources "https://www.udemy.com/course/mi-curso/"   # + PDFs, código y demás adjuntos
@@ -77,6 +112,8 @@ udemy --resources --update "<url>"                            # lecciones + PDFs
 udemy --lang es+en "<url>"                                    # texto en español con el inglés debajo
 udemy --sections 3-5 --lectures 40- "<url>"                   # solo una parte
 udemy --single --no-timestamps "<url>"                        # todo en un archivo, sin marcas de tiempo
+udemy --merge --update "<url>"                                # novedades + regenera el archivo unificado
+udemy --merge-from ~/Udemy-Transcripts/Mi\ curso              # unifica un curso ya descargado, sin Udemy
 udemy --format txt --width 80 "<url>"                         # texto plano a 80 columnas
 udemy --update --study prompt "<url>"                         # prompts para pegar en un chat (gratis)
 udemy --study api --ai-model claude-sonnet-5-5 "<url>"        # resumen y flashcards con la API
@@ -127,7 +164,33 @@ Se abre una ventana de Chromium. **Inicia sesión en Udemy ahí.** La sesión qu
 | `--single` | `~/Udemy-Transcripts/<curso>.md` (o `.txt` con `--format txt`) con tabla de contenidos |
 | `--txt` | el modo clásico: `--single --format txt` |
 
+| `--merge` | lo de siempre **más** `~/Udemy-Transcripts/<curso>.md` (o `<curso> (parte N de M).md`) con todo el curso |
+
 Cambia la carpeta base con `--out RUTA` o con la variable de entorno `UDEMY_OUT`.
+
+### Para NotebookLM y Notion: un solo archivo
+
+NotebookLM y Notion no cargan carpetas, solo archivos sueltos. Con **`--merge`** conservas la carpeta
+por lecciones (y por tanto `--update` y `--study`) y además obtienes un único Markdown **junto a la carpeta**:
+
+```
+~/Udemy-Transcripts/
+  Mi curso/                 la carpeta de siempre
+  Mi curso.md               ← el archivo unificado: súbelo a NotebookLM o impórtalo en Notion
+```
+
+- Se construye **desde lo ya descargado**, así que se regenera con `--update` y también sin conexión:
+  `udemy --merge-from "<carpeta del curso>"` (respeta `--sections` y `--lectures`).
+- Está **limpio para herramientas externas**: sin cabeceras YAML, sin enlaces a rutas de tu disco (los adjuntos
+  y las imágenes locales quedan como texto) y con las marcas de tiempo como `[12:34]` sin URL. Cada lección
+  conserva su enlace «Abrir en Udemy».
+- **Límite de tamaño:** NotebookLM admite unas 500 000 palabras por fuente. Si el curso supera
+  `--merge-words` (default 400 000) se divide por secciones en `Mi curso (parte 1 de 2).md`,
+  `(parte 2 de 2).md`… (cada una con su tabla de contenidos); carga todas las partes. `--merge-words 0`
+  desactiva la división.
+- Es solo Markdown: no se combina con `--single`, `--txt` ni `--format txt`.
+- La diferencia con `--single`: `--single` **sustituye** a la carpeta y se escribe al final del todo
+  (una interrupción pierde lo acumulado y no admite `--update` ni `--study`); `--merge` no.
 
 ### Cómo se ve una lección
 
@@ -312,6 +375,10 @@ udemy --study api --study-from ~/Udemy-Transcripts/Mi\ curso --sections 2-4   # 
 |------|----------|
 | `--format md\|txt` | Formato de salida (default `md`) |
 | `--single` | Todo el curso en UN solo archivo, con tabla de contenidos |
+| `--merge` | Además de la carpeta, un `.md` unificado del curso (ver «NotebookLM y Notion») |
+| `--merge-from CARPETA` | Unifica un curso ya descargado, sin abrir el navegador |
+| `--merge-words N` | Palabras máximas por archivo unificado (default `400000`); `0` = no dividir |
+| `--menu` | Abre el menú interactivo (también `udemy` sin argumentos en una terminal) |
 | `--txt` | El modo clásico: equivale a `--single --format txt` |
 | `--update` | Solo lo nuevo o cambiado; reanuda una descarga cortada |
 | `--resources` | Descarga también los adjuntos (PDF, código, zip…) y las imágenes de los artículos |
