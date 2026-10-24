@@ -22,6 +22,21 @@ def paragraphs_to_text(paragraphs, opts):
     return "\n\n".join(blocks)
 
 
+def resources_text(outcomes, links):
+    """Bloque «RECURSOS» de una lección (vacío si no tiene adjuntos)."""
+    lines = []
+    for outcome in outcomes:
+        name = outcome.name or outcome.resource.filename or outcome.resource.title
+        lines.append(f"- {outcome.rel}" if outcome.rel else f"- {name} (sin descargar)")
+    lines += [f"- {r.title or r.url}: {r.url}" if r.title != r.url else f"- {r.url}"
+              for r in links]
+    return "RECURSOS\n" + "\n".join(lines) if lines else ""
+
+
+def with_resources(text, resources):
+    return f"{text}\n\n{resources}" if resources and text else (resources or text)
+
+
 def single_part(num, section, title, text):
     """Bloque de una lección dentro del archivo único."""
     return f"{'=' * 70}\n[{num}] {section} — {title}\n{'=' * 70}\n\n{text}"

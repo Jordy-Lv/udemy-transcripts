@@ -61,6 +61,7 @@ def test_lecture_document_front_matter_and_body():
         'seccion: "Introducción"',
         'leccion: "Bienvenida"',
         "numero: 1",
+        'tipo: "video"',
         f'url: "{LINK}"',
         'duracion: "06:06"',
         'idioma: "es_LA"',
@@ -102,13 +103,14 @@ def test_course_index_lists_links_durations_and_gaps():
     index = course_index(COURSE, sections, entries)
     assert index.startswith('# Java: "Spring" Boot\n\n[Abrir el curso en Udemy]'
                             "(https://seti.udemy.com/course/java-spring/)\n\n"
-                            "2 de 4 lecciones con transcripción · duración total 07:46")
+                            "2 de 6 lecciones descargadas · 07:46 de vídeo")
     assert "- [001 - Bienvenida](01%20-%20Introducci%C3%B3n/001%20-%20Bienvenida.md)" \
         " — 06:06 · es_LA" in index
     assert "es_LA (automático)" in index
     assert "- 003 - Pendiente — 00:30 · pendiente de descargar" in index
     assert "- 004 - Sin subs — 00:10 · sin subtítulos" in index
-    assert "Un artículo" not in index and "Solo artículos" not in index
+    assert "- 005 - Un artículo — artículo · vacío" in index
+    assert "Solo artículos" in index
 
 
 def test_single_document_has_toc_anchors_and_sections():

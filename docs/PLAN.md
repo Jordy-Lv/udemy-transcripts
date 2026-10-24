@@ -141,7 +141,7 @@ el índice. Una descarga cortada se reanuda donde quedó.
     `--resource-types pdf,zip` (filtro opcional), `--max-size 200MB` (omitir archivos mayores).
 - **Imágenes de artículos** (`<img src="img-c.udemycdn.com/redactor/...">`, 533 en 1 867 artículos):
   con `--resources` se bajan a `recursos/<sección>/<lección>/img/` y el Markdown las enlaza en local.
-- **Rangos**: `--sections 3-5,8` y `--lectures 10-20` (numeración de Udemy).
+- **Rangos**: `--sections 3-5,8` y `--lectures 10-20` (numeración de Udemy; también `12-`).
 - **Rutas de aprendizaje** (Business): `udemy "<url de la ruta>"` → descarga cada curso en
   `<ruta>/<NN - curso>/` con un índice general. Endpoint a confirmar en la Fase 0.
 

@@ -43,18 +43,28 @@ class FakePage:
 
 
 class FakeContext:
-    """`context.request.get` responde con lo que diga `files[url]` (status, texto)."""
+    """`context.request.get` sirve `files[url]`: (status, texto|bytes) o (status, cuerpo, cabeceras)."""
 
     def __init__(self, files=None):
         self.files = files or {}
         self.requested = []
+        self.calls = []          # (url, headers)
         self.request = self
 
-    def get(self, url):
+    def get(self, url, headers=None, timeout=None):
         self.requested.append(url)
-        status, text = self.files.get(url, (404, ""))
-        return type("Resp", (), {"status": status, "text": lambda s: text,
-                                 "headers": {}})()
+        self.calls.append((url, headers))
+        entry = self.files.get(url, (404, ""))
+        status, body = entry[0], entry[1]
+        heads = dict(entry[2]) if len(entry) > 2 else {}
+        data = body if isinstance(body, bytes) else body.encode("utf-8")
+        total = len(data)
+        if headers and "Range" in headers and 200 <= status < 300:
+            status, data = 206, data[:1]
+            heads.setdefault("Content-Range", f"bytes 0-0/{total}")
+        return type("Resp", (), {
+            "status": status, "ok": 200 <= status < 300, "headers": heads,
+            "text": lambda s: data.decode("utf-8", "replace"), "body": lambda s: data})()
 
 
 def js(status, body="", retry_after=None):

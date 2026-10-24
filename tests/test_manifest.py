@@ -53,7 +53,7 @@ def test_up_to_date_requires_everything_to_match(tmp_path):
         cap = over.pop("cap", CAP)
         args = dict(rel=ENTRY["file"], render="md|v1")
         args.update(over)
-        return m.up_to_date(lec, sec, cap, args["rel"], args["render"], tmp_path)
+        return m.up_to_date(lec, sec, caption_signature(cap), args["rel"], args["render"], tmp_path)
 
     assert check()
     assert not check(cap=dict(CAP, file_name="nuevo.vtt"))          # subtítulo cambiado
@@ -69,5 +69,5 @@ def test_up_to_date_requires_everything_to_match(tmp_path):
 
 def test_lecture_without_id_is_never_up_to_date(tmp_path):
     m = Manifest(tmp_path / MANIFEST_NAME, 1, {"None": dict(ENTRY)})
-    assert not m.up_to_date(Lecture(None, "Bienvenida", 1, "Video", []), SEC, CAP,
-                            ENTRY["file"], "md|v1", tmp_path)
+    assert not m.up_to_date(Lecture(None, "Bienvenida", 1, "Video", []), SEC,
+                            caption_signature(CAP), ENTRY["file"], "md|v1", tmp_path)

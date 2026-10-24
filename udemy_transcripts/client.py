@@ -30,6 +30,8 @@ class ApiResult:
     status: int
     text: str = ""
     retry_after: Optional[str] = None
+    body: bytes = b""                      # descargas binarias (download_bytes)
+    headers: Optional[dict] = None         # en minúsculas (download_bytes)
 
     @property
     def ok(self):
@@ -156,6 +158,18 @@ class Client:
                 resp = self.context.request.get(url)
                 return ApiResult(resp.status, resp.text(),
                                  resp.headers.get("retry-after"))
+            except Exception as exc:
+                return ApiResult(0, str(exc))
+        return with_retries(once, sleep=self.sleep, log=self.log, what=what)
+
+    def download_bytes(self, url, what, headers=None, timeout=900_000):
+        """GET binario (PDF, zip…) con reintentos; sin el tope de 30 s de Playwright."""
+        def once():
+            try:
+                resp = self.context.request.get(url, headers=headers, timeout=timeout)
+                head = {k.lower(): v for k, v in dict(resp.headers).items()}
+                return ApiResult(resp.status, "", head.get("retry-after"),
+                                 resp.body() if resp.ok else b"", head)
             except Exception as exc:
                 return ApiResult(0, str(exc))
         return with_retries(once, sleep=self.sleep, log=self.log, what=what)

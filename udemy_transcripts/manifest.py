@@ -17,10 +17,11 @@ def caption_signature(caption):
 
 
 class Manifest:
-    def __init__(self, path, course_id=None, entries=None):
+    def __init__(self, path, course_id=None, entries=None, resources=None):
         self.path = Path(path)
         self.course_id = str(course_id) if course_id is not None else None
         self.entries = entries or {}          # id de lección (str) → dict
+        self.resources = resources or {}      # id del recurso (str) → dict
 
     @classmethod
     def load(cls, path, course_id, log=print):
@@ -40,7 +41,9 @@ class Manifest:
             log(f"  ⚠ {path.name} es del curso {data.get('course_id')}, no del {course_id}; "
                 "se ignora.")
             return cls(path, course_id)
-        return cls(path, course_id, data["lectures"])
+        resources = data.get("resources")
+        return cls(path, course_id, data["lectures"],
+                   resources if isinstance(resources, dict) else {})
 
     def get(self, lecture_id):
         return self.entries.get(str(lecture_id))
@@ -48,20 +51,39 @@ class Manifest:
     def set(self, lecture_id, entry):
         self.entries[str(lecture_id)] = entry
 
-    def up_to_date(self, lecture, section, caption, rel_path, render, course_dir):
-        """¿Se puede omitir la lección? Solo si nada de lo que afecta al archivo cambió."""
+    def up_to_date(self, lecture, section, signature, rel_path, render, course_dir):
+        """¿Se puede omitir la lección? Solo si nada de lo que afecta al archivo cambió.
+
+        `signature` es la huella del contenido de origen: la del subtítulo en los
+        vídeos y la del HTML en los artículos.
+        """
         entry = self.get(lecture.id) if lecture.id else None
         return bool(
             entry
-            and entry.get("caption") == caption_signature(caption)
+            and entry.get("caption") == signature
             and entry.get("file") == rel_path
             and entry.get("render") == render
             and entry.get("title") == lecture.title
             and entry.get("section") == section.title
             and fs_path(Path(course_dir) / rel_path).is_file())
 
+    # ---- recursos ------------------------------------------------------
+    def resource_done(self, resource_id, rel_path, course_dir):
+        """¿Ya está el archivo completo? (misma ruta y el tamaño apuntado coincide)."""
+        entry = self.resources.get(str(resource_id))
+        if not entry or entry.get("file") != rel_path:
+            return False
+        try:
+            return fs_path(Path(course_dir) / rel_path).stat().st_size == entry.get("size")
+        except OSError:
+            return False
+
+    def set_resource(self, resource_id, entry):
+        self.resources[str(resource_id)] = entry
+
     def save(self):
-        data = {"version": VERSION, "course_id": self.course_id, "lectures": self.entries}
+        data = {"version": VERSION, "course_id": self.course_id, "lectures": self.entries,
+                "resources": self.resources}
         tmp = fs_path(self.path.with_name(self.path.name + ".tmp"))
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True),
                        encoding="utf-8")

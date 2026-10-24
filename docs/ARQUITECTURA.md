@@ -1,22 +1,27 @@
 # Arquitectura de udemy-transcripts
 
-> Estado: **Fase 3 (0.4.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
+> Estado: **Fase 4 (0.5.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
 > en un paquete; el plan de cambios está en [PLAN.md](PLAN.md) y la API en [API.md](API.md).
 
 ## Estructura
 
 ```
 udemy_transcripts/
-  cli.py          argumentos y orquestación (sesión, curso, temario, descarga, archivo único)
+  cli.py          argumentos y orquestación: download_one (un curso) y download_path (una ruta)
   client.py       Client (navegador + portal), ApiResult, reintentos, errores por status, login
   portal.py       Portal: host (www / <org>.udemy.com) y URLs base
   courses.py      lista de cursos, URL/slug/id → course_id (validado con la API)
-  curriculum.py   modelo Section/Lecture y lectura del temario
+  curriculum.py   modelo Section/Lecture/Resource y lectura del temario (artículos y adjuntos incluidos)
+  ranges.py       --sections/--lectures: `3-5,8,12-` → selector de lecciones
+  html2md.py      HTML de los artículos → Markdown o texto plano (sin dependencias)
+  resources.py    adjuntos: nombres, plan con tamaños, confirmación, descarga atómica, imágenes
+  paths.py        rutas de aprendizaje (Business): cursos de la ruta e índice
   captions.py     parser WebVTT por bloques → Cue(start, end, text); elección de idioma
   paragraphs.py   cues → párrafos (pausa 2,5 s / ~400 car.) y qué párrafos llevan marca de tiempo
   manifest.py     .udemy-transcripts.json: estado por lección para --update y reanudar
-  download.py     bucle de descarga: elige subtítulo, omite lo vigente, renderiza y escribe
-  render/         common (opciones, tiempos), markdown (lección, README índice, archivo único), txt
+  download.py     bucle de descarga: recursos → imágenes → ¿vigente? → render → escribe + manifest
+  render/         common (opciones, tiempos), markdown (lección, artículo, README, enlaces, archivo único),
+                  mdtext (escape), txt
   errors.py       UdemyError y subclases (el mensaje se muestra al usuario)
   util.py         safe_name y fs_path (rutas de más de 259 caracteres en Windows)
 udemy_transcripts.py   envoltorio: `python udemy_transcripts.py` sigue funcionando
@@ -66,4 +71,6 @@ Lo único que no cubren es el navegador real: ver la prueba manual de cada fase 
 2. `--update` decide por la huella del subtítulo (`file_name` del CDN) sin descargarlo; si Udemy
    cambiara el contenido sin cambiar ese nombre no lo detectaría (el hash del VTT se guarda, pero solo
    como referencia).
-3. Los recursos (PDF, código, artículos) llegan en la Fase 4.
+3. Los recursos se leen enteros en memoria (Playwright no hace streaming): por eso `--max-size`
+   (500MB por defecto). Los tamaños se sondean con `Range: bytes=0-0`; si el servidor lo ignora se baja el archivo.
+4. En una ruta de aprendizaje la confirmación de tamaño se pide por curso, no para toda la ruta.

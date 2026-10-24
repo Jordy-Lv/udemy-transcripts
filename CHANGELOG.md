@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.5.0 — Fase 4: todo el material del curso
+
+### Novedades
+- **Artículos**: las lecciones de tipo artículo se descargan y se convierten de HTML a Markdown
+  (títulos, listas anidadas, código con lenguaje, tablas, enlaces, imágenes, citas) o a texto plano con
+  `--format txt`. Salen en su sección con `tipo: "articulo"` y entran en el índice y en `--single`.
+- **Recursos de todo tipo** (`--resources`): cualquier adjunto descargable (`File` y otros con
+  `download_urls`), sin filtrar por extensión, en `recursos/<NN - sección>/<NNN - lección>/`. Los
+  enlaces externos se listan en cada lección y en `recursos/enlaces.md`.
+  - Resumen previo con nº de archivos y tamaño total (petición `Range: bytes=0-0`) y confirmación si
+    pasa de 500 MB (`--yes`); `--max-size` (default 500MB) omite los muy pesados.
+  - Reanudable y sin duplicados (el manifest guarda ruta y tamaño); escritura atómica (`.part`).
+  - Nombres repetidos numerados (`a (2).pdf`); extensión tomada del CDN si falta; ejecutables
+    avisados y nunca ejecutados.
+  - `--resource-types pdf,zip`, `--resources-only`.
+- **Imágenes de artículos**: con `--resources` se guardan en `…/img/` y el Markdown las enlaza en local.
+- **Rangos**: `--sections 3-5,8` y `--lectures 10-20` (también `12-`), con la numeración de Udemy. El
+  índice sigue mostrando el curso completo.
+- **Rutas de aprendizaje** (Business): `udemy "<url de la ruta>"` baja cada curso a `<ruta>/<NN - curso>/`
+  con un `README.md` general; los laboratorios y evaluaciones se listan sin descargar; un curso que falla
+  no detiene la ruta (sí la pérdida de sesión).
+- Las lecciones listan sus recursos aunque no se descarguen («sin descargar (usa --resources)») y
+  enlazan los que ya están en disco.
+
+### Cambios de comportamiento
+- Los artículos ahora se descargan siempre (antes se ignoraban) y cuentan en «Listo: N lecciones».
+- El índice dice «N de M lecciones descargadas» (vídeos y artículos).
+- Los archivos de lección cambian ligeramente (campo `tipo` y sección «Recursos»): con `--update` se
+  reescriben una vez.
+
+### Interno
+- Módulos nuevos: `html2md`, `resources`, `ranges`, `paths`, `render/mdtext`. `download.py` procesa
+  vídeos, artículos y recursos; `cli.py` se divide en `download_one` / `download_path`.
+- `Client.download_bytes` (descargas binarias sin el tope de 30 s). 232 tests sin red.
+
+### Verificado en vivo (seti.udemy.com, 2026-10-24)
+- Curso Spring Boot con `--resources`: 298 lecciones (266 vídeos + 32 artículos) y 29 archivos (63.8 MB:
+  pdf, zip, html, sql, md, png) en `recursos/`; `--update` posterior: 298 sin cambios y 29 ya descargados en 5 s.
+- `--resources-only --resource-types pdf --max-size 5MB`: 4 PDF descargados, 21 omitidos por tipo, 4 por tamaño.
+- `--sections 2 --lectures 5-8`: 4 lecciones. Ruta AWS (`/learning-paths/1283634/`): un curso descargado,
+  otro con el 403 real de «Empezar curso» anotado en el índice, y laboratorios/evaluación listados.
+
+### Sin verificar
+- Imágenes de artículos y conversión de código/tablas con artículos reales (los 32 del curso de prueba no
+  traen imágenes ni bloques de código; solo se cubren con tests).
+- Descarga de archivos de varios cientos de MB (Playwright los carga enteros en memoria).
+
 ## 0.4.0 — Fase 3: salida pensada para estudiar
 
 ### Cambios de comportamiento

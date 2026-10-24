@@ -4,6 +4,7 @@ Descarga las **transcripciones (subtítulos)** de todos los videos de un curso d
 
 - Convierte los subtítulos a **párrafos legibles** con **marcas de tiempo que enlazan al segundo exacto del vídeo**.
 - Cada lección lleva cabecera YAML (curso, sección, URL, duración, idioma…) y el curso un `README.md` índice: compatible con Obsidian, Notion y VS Code.
+- Descarga también los **artículos** (convertidos a Markdown) y los **recursos de todo tipo** que deja el instructor (PDF, código, zips…), por curso completo, por rangos o por **ruta de aprendizaje**.
 - Tres salidas: **un archivo por video**, **todo el curso en un solo archivo** (con tabla de contenidos) o el `.txt` clásico.
 - **`--update`** descarga solo lo nuevo o cambiado y reanuda una descarga cortada.
 - Usa un navegador real (Playwright) para reutilizar tu sesión y atravesar la protección Cloudflare de Udemy.
@@ -48,6 +49,7 @@ udemy "https://www.udemy.com/course/mi-curso/"   # Markdown: un .md por video + 
 udemy --single "https://www.udemy.com/course/mi-curso/"   # todo el curso en un solo .md
 udemy --format txt "https://www.udemy.com/course/mi-curso/"   # texto plano, un .txt por video
 udemy --update "https://www.udemy.com/course/mi-curso/"   # solo lo nuevo o cambiado
+udemy --resources "https://www.udemy.com/course/mi-curso/"   # + PDFs, código y demás adjuntos
 ```
 
 Puedes pasarle la URL de la página del curso **o** la del reproductor (`/learn/lecture/...`), o directamente el id numérico.
@@ -105,6 +107,7 @@ curso: "Java: Spring Boot - Guía definitiva"
 seccion: "Introducción a Spring boot"
 leccion: "Spring boot: @Controller parte 1"
 numero: 11
+tipo: "video"
 url: "https://miempresa.udemy.com/course/java-spring-boot-guia-definitiva/learn/lecture/51621647"
 duracion: "09:58"
 idioma: "es_LA"
@@ -116,11 +119,18 @@ subtitulo_automatico: false
 [00:05](https://…/learn/lecture/51621647?start=5) Hola a todos, bienvenidos a un nuevo vídeo…
 
 [00:38](https://…/learn/lecture/51621647?start=38) Importante que tengamos esta versión…
+
+## Recursos
+
+- [spring-boot-3-template-main.zip](../recursos/02%20-%20…/009%20-%20…/spring-boot-3-template-main.zip)
+- [Instalaciones necesarias](https://gist.github.com/…)
 ```
 
 - **Párrafos:** se corta tras una pausa de 2,5 s o más, o cuando el párrafo pasa de ~400 caracteres y termina una oración. Si el subtítulo es automático y no tiene puntuación, solo corta por pausas.
 - **Marcas de tiempo:** una por párrafo (`--ts-every 60` las espacia a una por minuto como mucho; `--no-timestamps` las quita). En `.txt` salen como `[04:15]`, sin enlace.
 - **Texto:** en Markdown se escapan los caracteres especiales (`_`, `*`, `<`…) para que `snake_case` o `Map<K, V>` se vean tal cual.
+- **Artículos:** las lecciones de tipo artículo se convierten de HTML a Markdown (títulos, listas, código, tablas, enlaces e imágenes) y salen en su sección con `tipo: "articulo"`.
+- **Recursos:** cada lección lista sus adjuntos (los archivos locales enlazados y los enlaces externos).
 
 ### `--update` y reanudar
 
@@ -133,6 +143,70 @@ anterior se conserva (se avisa). `--update` no aplica a `--single`.
 
 ---
 
+## Recursos, rangos y rutas de aprendizaje
+
+### Recursos de todo tipo (`--resources`)
+
+Los instructores adjuntan PDFs, código, zips, hojas de cálculo, audio… Con `--resources` se descargan
+**todos**, sea cual sea su tipo, y las imágenes de los artículos:
+
+```
+<curso>/recursos/
+  enlaces.md                          todos los enlaces externos del curso
+  02 - Introducción a Spring boot/
+    009 - Spring boot- Creando el proyecto/
+      spring-boot-3-template-main.zip
+```
+
+- Antes de bajar nada muestra el resumen (`29 archivo(s) por descargar (63.8 MB)`) y pide confirmación
+  si el total pasa de 500 MB (`--yes` para aceptar sin preguntar).
+- **Seguro:** los archivos pesados se omiten (`--max-size`, default 500MB); los ejecutables e
+  instaladores (`.exe`, `.msi`, `.jar`…) se guardan con un aviso y **nunca se ejecutan**.
+- **Reanudable:** un archivo completo (misma ruta y tamaño) no se vuelve a bajar; uno a medias nunca
+  queda en su sitio (se escribe como `.part` y se renombra al terminar).
+- Dos adjuntos con el mismo nombre en una lección se numeran: `datos.csv`, `datos (2).csv`. Si el
+  nombre no tiene extensión se usa la del archivo en el servidor.
+- `--resource-types pdf,zip` limita por extensión y `--resources-only` baja solo los recursos, sin
+  transcripciones ni artículos.
+
+```bash
+udemy --resources "<url del curso>"                       # todo: lecciones + recursos
+udemy --resources-only --resource-types pdf --max-size 50MB "<url>"
+```
+
+### Solo una parte del curso
+
+```bash
+udemy --sections 3-5,8 "<url>"        # secciones 3, 4, 5 y 8 (la numeración «NN» de las carpetas)
+udemy --lectures 10-20 "<url>"        # lecciones 010 a 020 (el «NNN» de los archivos)
+udemy --sections 12- "<url>"          # de la 12 hasta el final
+```
+
+El índice `README.md` sigue mostrando el curso completo; las lecciones que no bajaste figuran como
+«pendiente de descargar». Combinado con `--update`, puedes ir completando el curso por partes.
+
+### Rutas de aprendizaje (Udemy Business)
+
+Pasa la URL de una ruta y cada curso va a su carpeta numerada, con un índice general:
+
+```bash
+udemy "https://miempresa.udemy.com/learning-paths/1283634/"
+```
+
+```
+<ruta>/
+  README.md                           secciones de la ruta y enlaces a cada curso
+  01 - Curso uno/   (con su README.md, lecciones y .udemy-transcripts.json)
+  02 - Curso dos/
+```
+
+Solo se descargan los **cursos**; los laboratorios y las evaluaciones se listan en el índice como «no
+se descarga». Si un curso falla (p. ej. pide «Empezar curso»), se anota en el índice y se sigue con el
+siguiente; si se pierde la sesión, se detiene. `--sections`, `--lectures`, `--resources` y `--update`
+se aplican a cada curso de la ruta.
+
+---
+
 ## Opciones
 
 | Flag | Para qué |
@@ -141,6 +215,12 @@ anterior se conserva (se avisa). `--update` no aplica a `--single`.
 | `--single` | Todo el curso en UN solo archivo, con tabla de contenidos |
 | `--txt` | El modo clásico: equivale a `--single --format txt` |
 | `--update` | Solo lo nuevo o cambiado; reanuda una descarga cortada |
+| `--resources` | Descarga también los adjuntos (PDF, código, zip…) y las imágenes de los artículos |
+| `--resources-only` | Solo los recursos, sin transcripciones ni artículos |
+| `--resource-types EXT` | Solo estas extensiones (`pdf,zip`) |
+| `--max-size TAM` | Omite archivos más grandes (default `500MB`) |
+| `--yes` | No pedir confirmación cuando los recursos pesan mucho |
+| `--sections R` / `--lectures R` | Solo estas secciones / lecciones (`3-5,8`, `12-`) |
 | `--no-timestamps` | Sin marcas de tiempo al inicio de los párrafos |
 | `--ts-every SEG` | Como mucho una marca de tiempo cada SEG segundos (default: una por párrafo) |
 | `--list` | Lista tus cursos suscritos (con su id) y termina |
@@ -168,6 +248,7 @@ anterior se conserva (se avisa). `--update` no aplica a `--single`.
 2. Lee el temario del curso por la API interna de Udemy.
 3. Descarga el archivo de subtítulos (`.vtt`) de cada video.
 4. Lo agrupa en párrafos con marcas de tiempo y lo guarda como Markdown (o `.txt`).
+5. Convierte los artículos y, con `--resources`, descarga los adjuntos.
 
 Solo necesita Playwright (el instalador lo incluye). Diseño interno: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md);
 hoja de ruta: [docs/PLAN.md](docs/PLAN.md).

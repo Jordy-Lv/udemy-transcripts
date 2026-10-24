@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ..paragraphs import MAX_CHARS, PAUSE
 
-RENDER_VERSION = 1   # súbela si cambia la salida para que --update regenere los archivos
+RENDER_VERSION = 2   # súbela si cambia la salida para que --update regenere los archivos
 
 
 @dataclass(frozen=True)
