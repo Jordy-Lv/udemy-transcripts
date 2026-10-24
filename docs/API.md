@@ -133,11 +133,13 @@ learning_path_section { id, title, description, items[] }
 ## Inscripción (hallazgo importante)
 
 Se pidió `subscriber-curriculum-items` de un curso **no inscrito** (`2645936`, AWS CLF-C02, de una ruta):
-respondió **200** con el temario (234 ítems). Es decir, en este portal el temario es legible
-sin inscribirse. Queda **sin verificar** si los `captions` también vienen en esos cursos y si
-la URL del VTT se descarga; hay que comprobarlo en la Fase 2 antes de prometer «cursos de rutas
-sin inscripción». El plan asumía un 403 («pulsa Empezar curso»): conservar ese mensaje como
-caso de error, pero no es lo que se observó aquí.
+respondió **200** con el temario (234 ítems) y, **verificado en la Fase 2**, también con los `captions`:
+las 34 lecciones de vídeo muestreadas traían subtítulos y el VTT se descargó con 200. Es decir, en este
+portal se puede bajar el temario y las transcripciones de un curso **sin inscribirse**, y ese curso trae
+28 idiomas (`es_ES`, `en_US`, `pt_BR`, `fr_FR`, `de_DE`, `ja_JP`…): sirve para probar `--lang es+en` (Fase 6).
+El plan asumía un 403 («pulsa Empezar curso»): la herramienta conserva ese mensaje para cuando ocurra
+(Business + 403 en el temario), pero no es lo que se observó aquí. Sigue sin verificarse si los
+recursos (`File`) de un curso no inscrito se descargan.
 
 ## Efectos sobre el plan
 

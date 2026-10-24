@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from .errors import AccessDeniedError
 from .util import safe_name
 
 _FIELDS = (
@@ -68,4 +69,13 @@ def parse_curriculum(items):
 def fetch_curriculum(client, course_id):
     url = (f"{client.portal.api}/courses/{course_id}/subscriber-curriculum-items/"
            f"?page_size=200{_FIELDS}")
-    return parse_curriculum(client.paginate(url, "el temario del curso"))
+    try:
+        items = client.paginate(url, "el temario del curso")
+    except AccessDeniedError:
+        if not client.portal.is_business:
+            raise
+        raise AccessDeniedError(
+            "Sin acceso al temario del curso (HTTP 403). En Udemy Business hay que "
+            f"inscribirse una vez: abre el curso en {client.portal.base} y pulsa "
+            "«Empezar curso»; luego repite.")
+    return parse_curriculum(items)

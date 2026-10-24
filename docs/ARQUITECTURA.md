@@ -1,6 +1,6 @@
 # Arquitectura de udemy-transcripts
 
-> Estado: **Fase 1 (0.2.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
+> Estado: **Fase 2 (0.3.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
 > en un paquete; el plan de cambios está en [PLAN.md](PLAN.md) y la API en [API.md](API.md).
 
 ## Estructura
@@ -27,9 +27,9 @@ Solo depende de la librería estándar + **Playwright** (importado de forma dife
 ```
 udemy <url|slug|id> [--txt] [--lang] [--out] ...
    │
-   ├─ 1. Portal tomado de la URL (www.udemy.com por defecto)
+   ├─ 1. Portal: host de la URL › --business/UDEMY_BUSINESS › www.udemy.com (portal.choose_portal)
    ├─ 2. Chromium con perfil persistente (~/.cache/udemy-transcripts-profile), ventana visible
-   │        · --token → cookie access_token en .udemy.com
+   │        · --token → cookie access_token (host del portal en Business, .udemy.com en www)
    ├─ 3. ensure_login()      GET users/me  → si no hay sesión, login manual + ENTER
    ├─ 4. resolve_course_id() subscribed-courses; si no, landing + candidatos validados con courses/<id>/
    ├─ 5. fetch_curriculum()  subscriber-curriculum-items (paginado) → [Section[Lecture]]
@@ -57,6 +57,4 @@ Lo único que no cubren es el navegador real: ver la prueba manual de cada fase 
 ## Límites actuales
 
 1. El formato de salida es solo `.txt` (Markdown, marcas de tiempo y `--update` llegan en la Fase 3).
-2. Udemy Business: el host sale de la URL, pero `--business`, la cookie de `--token` en el
-   dominio del portal y el mensaje de «Empezar curso» se completan en la Fase 2.
-3. El modo `--txt` escribe al final: una interrupción pierde lo acumulado (la reanudación llega con el manifest).
+2. El modo `--txt` escribe al final: una interrupción pierde lo acumulado (la reanudación llega con el manifest).

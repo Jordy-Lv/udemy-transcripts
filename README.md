@@ -48,6 +48,24 @@ udemy --txt "https://www.udemy.com/course/mi-curso/"  # todo en un solo .txt
 
 Puedes pasarle la URL de la página del curso **o** la del reproductor (`/learn/lecture/...`), o directamente el id numérico.
 
+### Udemy Business
+
+Si tu empresa te da acceso por Udemy Business (SSO), pasa la URL del portal tal cual:
+
+```bash
+udemy "https://miempresa.udemy.com/course/mi-curso/learn/lecture/123456"
+```
+
+o indica la organización cuando uses un id/slug o `--list`:
+
+```bash
+udemy --business miempresa --list
+udemy --business miempresa mi-curso          # o export UDEMY_BUSINESS=miempresa
+```
+
+El login (SSO) lo haces tú en la ventana de Chromium. Si el curso responde «sin acceso», ábrelo
+una vez en el portal y pulsa **Empezar curso**.
+
 ### La primera vez
 Se abre una ventana de Chromium. **Inicia sesión en Udemy ahí.** La sesión queda guardada, así que las siguientes veces no tendrás que volver a loguearte.
 
@@ -76,6 +94,7 @@ Cambia la carpeta base con `--out RUTA` o con la variable de entorno `UDEMY_OUT`
 | `--lang es,en` | Orden de preferencia del idioma del subtítulo (default `es,en`) |
 | `--out RUTA` | Carpeta base de salida (default `~/Udemy-Transcripts`) |
 | `--width N` | Ancho de línea del texto; `0` = no ajustar (default `100`) |
+| `--business ORG` | Organización de Udemy Business (`miempresa` para `miempresa.udemy.com`); también `UDEMY_BUSINESS` |
 | `--token TOK` | `access_token` de la cookie, para evitar el login manual (avanzado) |
 
 ---

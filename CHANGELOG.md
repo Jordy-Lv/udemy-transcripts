@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0 — Fase 2: Udemy Business
+
+- **Portal de Business**: el host se toma de la URL (`https://<org>.udemy.com/...`) y todas las
+  llamadas (login, API, landing) van a ese host, así que viaja la sesión SSO. Si pasas un id o
+  un slug, indica la organización con `--business ORG` (o `UDEMY_BUSINESS`): acepta `seti`,
+  `seti.udemy.com` o una URL del portal. Si la URL y `--business` no coinciden, manda la URL (con aviso).
+- `--list` en Business suma `subscribed-courses` y `subscription-course-enrollments` sin duplicados
+  (la segunda lista es de mejor esfuerzo: si falla se ignora).
+- `--token` inyecta la cookie `access_token` en el host del portal (en www sigue siendo `.udemy.com`).
+- Un 403 en el temario de Business explica cómo inscribirse: abrir el curso en el portal y pulsar
+  «Empezar curso».
+- Cursos de www: sin cambios de comportamiento (cubierto por los tests existentes).
+- 93 tests sin red.
+
+### Verificado en vivo (seti.udemy.com, 2026-10-24)
+- `udemy --business seti --list` → 202 cursos, sesión reutilizada del perfil sin volver a pedir login.
+- `udemy --business seti --txt java-spring-boot-guia-definitiva` (solo slug) → 266/266 transcripciones, 0 errores.
+
+### Sin verificar
+- `--token` en Business (no se probó con un token real).
+- El formato de `subscription-course-enrollments` (vacío en la cuenta de prueba).
+- Regresión contra www.udemy.com con una cuenta personal (solo cubierta por tests).
+
 ## 0.2.0 — Fase 1: base sólida
 
 ### Cambios internos

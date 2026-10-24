@@ -3,7 +3,7 @@
 import re
 from collections import namedtuple
 
-from .errors import ApiError, NotFoundError, UdemyError
+from .errors import AccessDeniedError, ApiError, NotFoundError, UdemyError
 
 CourseRef = namedtuple("CourseRef", "id slug")
 
@@ -15,10 +15,33 @@ _ID_PATTERNS = (
 )
 
 
+def _course_of(row):
+    """Curso de una fila de inscripción (el curso mismo o anidado en `course`)."""
+    course = row.get("course") if isinstance(row.get("course"), dict) else row
+    return course if course.get("id") and course.get("title") else None
+
+
 def list_courses(client):
-    url = (f"{client.portal.api}/users/me/subscribed-courses/"
-           "?fields%5Bcourse%5D=id,title,url&page_size=100&ordering=-last_accessed")
-    return client.paginate(url, "tu lista de cursos")
+    """Cursos del usuario; en Business se suman las inscripciones de la suscripción."""
+    api = client.portal.api
+    rows = client.paginate(
+        f"{api}/users/me/subscribed-courses/"
+        "?fields%5Bcourse%5D=id,title,url&page_size=100&ordering=-last_accessed",
+        "tu lista de cursos")
+    if client.portal.is_business:
+        seen = {c.get("id") for c in rows}
+        try:
+            extra = client.paginate(
+                f"{api}/users/me/subscription-course-enrollments/?page_size=100",
+                "tus inscripciones de Business")
+        except (ApiError, NotFoundError, AccessDeniedError):
+            extra = []            # endpoint auxiliar: su ausencia no impide listar
+        for row in extra:
+            course = _course_of(row)
+            if course and course["id"] not in seen:
+                seen.add(course["id"])
+                rows.append(course)
+    return rows
 
 
 def parse_course_ref(arg):

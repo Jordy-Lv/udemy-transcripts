@@ -17,7 +17,7 @@ from .client import Client, ensure_login
 from .courses import course_title, list_courses, resolve_course_id
 from .curriculum import fetch_curriculum
 from .errors import UdemyError
-from .portal import Portal, portal_from_ref
+from .portal import choose_portal, host_from_ref, token_cookie
 from .render.txt import cues_to_text, single_file, single_part
 from .util import safe_name
 
@@ -39,6 +39,10 @@ def build_parser():
     ap.add_argument("course", nargs="?", help="URL del curso, slug o course_id numérico")
     ap.add_argument("--list", action="store_true", dest="do_list",
                     help="lista tus cursos suscritos y termina")
+    ap.add_argument("--business", metavar="ORG", default=os.environ.get("UDEMY_BUSINESS"),
+                    help="organización de Udemy Business (p. ej. seti para seti.udemy.com) "
+                         "cuando pasas un id/slug o usas --list (o env UDEMY_BUSINESS). "
+                         "Una URL ya indica su portal")
     ap.add_argument("--token", default=os.environ.get("UDEMY_TOKEN"),
                     help="access_token de la cookie (evita el login manual; o env UDEMY_TOKEN)")
     ap.add_argument("--lang", default="es,en",
@@ -94,16 +98,13 @@ def download_transcripts(client, sections, langs, course_dir=None, width=100,
     return stats
 
 
-def _launch(pw, args):
+def _launch(pw, args, portal):
     context = pw.chromium.launch_persistent_context(
         str(PROFILE_DIR), headless=args.headless,
         viewport={"width": 1280, "height": 800},
         args=["--disable-blink-features=AutomationControlled"])
     if args.token:
-        context.add_cookies([{
-            "name": "access_token", "value": args.token,
-            "domain": ".udemy.com", "path": "/", "secure": True,
-        }])
+        context.add_cookies([token_cookie(args.token, portal)])
     return context
 
 
@@ -122,10 +123,16 @@ def run(args):
         print("⚠ Aviso: Udemy suele bloquear el modo headless (Cloudflare). "
               "Si falla, ejecútalo sin --headless.")
     langs = parse_langs(args.lang)
-    portal = portal_from_ref(args.course) if args.course else Portal()
+    portal = choose_portal(args.course, args.business)
+    if args.business and host_from_ref(args.course) and \
+            host_from_ref(args.course) != choose_portal(None, args.business).host:
+        print(f"⚠ Aviso: la URL apunta a {portal.host}; se ignora --business "
+              f"{args.business}.")
+    if portal.is_business:
+        print(f"• Portal: Udemy Business ({portal.host})")
 
     with _import_playwright()() as pw:
-        context = _launch(pw, args)
+        context = _launch(pw, args, portal)
         try:
             page = context.pages[0] if context.pages else context.new_page()
             client = Client(context, page, portal)
