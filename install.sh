@@ -16,23 +16,19 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-# 2) entorno aislado + script
+# 2) entorno aislado + paquete (instala también Playwright)
 mkdir -p "$APP_DIR" "$BIN_DIR"
-cp "$SRC_DIR/udemy_transcripts.py" "$APP_DIR/udemy_transcripts.py"
+rm -f "$APP_DIR/udemy_transcripts.py"   # script suelto de versiones anteriores
 echo "  • Creando entorno virtual…"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip >/dev/null
-echo "  • Instalando Playwright…"
-"$VENV/bin/pip" install playwright >/dev/null
+echo "  • Instalando udemy-transcripts y Playwright…"
+"$VENV/bin/pip" install --upgrade "$SRC_DIR" >/dev/null
 echo "  • Descargando Chromium (~170 MB, puede tardar)…"
 "$VENV/bin/python" -m playwright install chromium
 
 # 3) comando global `udemy`
-cat > "$BIN_DIR/udemy" <<EOF
-#!/bin/bash
-exec "$VENV/bin/python" "$APP_DIR/udemy_transcripts.py" "\$@"
-EOF
-chmod +x "$BIN_DIR/udemy"
+ln -sf "$VENV/bin/udemy" "$BIN_DIR/udemy"
 
 echo ""
 echo "✓ ¡Listo! Comando instalado: udemy"

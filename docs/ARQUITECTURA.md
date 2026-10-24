@@ -1,54 +1,62 @@
 # Arquitectura de udemy-transcripts
 
-> Estado: versión inicial (`9a21915`), analizada el 2026-10-24.
+> Estado: **Fase 1 (0.2.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
+> en un paquete; el plan de cambios está en [PLAN.md](PLAN.md) y la API en [API.md](API.md).
 
-Todo vive en un único script, [`udemy_transcripts.py`](../udemy_transcripts.py) (~310 líneas),
-que solo depende de la librería estándar + **Playwright**.
+## Estructura
+
+```
+udemy_transcripts/
+  cli.py          argumentos, orquestación, descarga y guardado
+  client.py       Client (navegador + portal), ApiResult, reintentos, errores por status, login
+  portal.py       Portal: host (www / <org>.udemy.com) y URLs base
+  courses.py      lista de cursos, URL/slug/id → course_id (validado con la API)
+  curriculum.py   modelo Section/Lecture y lectura del temario
+  captions.py     parser WebVTT por bloques → Cue(start, end, text); elección de idioma
+  render/txt.py   texto plano: una oración por línea, ajuste de ancho, archivo único
+  errors.py       UdemyError y subclases (el mensaje se muestra al usuario)
+  util.py         safe_name
+udemy_transcripts.py   envoltorio: `python udemy_transcripts.py` sigue funcionando
+tests/                 pytest sin red (FakePage / FakeContext en conftest.py)
+```
+
+Solo depende de la librería estándar + **Playwright** (importado de forma diferida).
 
 ## Flujo
 
 ```
 udemy <url|slug|id> [--txt] [--lang] [--out] ...
    │
-   ├─ 1. Abre Chromium con perfil persistente (~/.cache/udemy-transcripts-profile)
-   │     · ventana visible: Cloudflare bloquea headless
-   │     · --token → inyecta la cookie access_token en .udemy.com
-   │
-   ├─ 2. ensure_login()        → GET /api-2.0/users/me/  (si no hay sesión, pide login manual + ENTER)
-   ├─ 3. resolve_course_id()   → busca el slug en /users/me/subscribed-courses/
-   │                             fallback: regex sobre el HTML de /course/<slug>/
-   ├─ 4. GET /courses/<id>/    → título del curso
-   ├─ 5. fetch_curriculum()    → /courses/<id>/subscriber-curriculum-items/ (paginado)
-   │                             capítulos (chapter) + lecciones (lecture → asset → captions[])
+   ├─ 1. Portal tomado de la URL (www.udemy.com por defecto)
+   ├─ 2. Chromium con perfil persistente (~/.cache/udemy-transcripts-profile), ventana visible
+   │        · --token → cookie access_token en .udemy.com
+   ├─ 3. ensure_login()      GET users/me  → si no hay sesión, login manual + ENTER
+   ├─ 4. resolve_course_id() subscribed-courses; si no, landing + candidatos validados con courses/<id>/
+   ├─ 5. fetch_curriculum()  subscriber-curriculum-items (paginado) → [Section[Lecture]]
    ├─ 6. por cada lección de vídeo:
-   │       pick_caption()  → elige subtítulo según --lang (fallback: el primero)
-   │       context.request.get(caption.url) → archivo .vtt (CDN firmado)
-   │       vtt_to_text()   → quita tiempos/etiquetas/duplicados, una oración por línea, ajuste a --width
-   └─ 7. guarda:
-           normal: <out>/<curso>/<NN - sección>/<NNN - lección>.txt
-           --txt : <out>/<curso>.txt
+   │        pick_caption() → download_text(.vtt) → parse_vtt() → cues_to_text()
+   └─ 7. guarda  <out>/<curso>/<NN - sección>/<NNN - lección>.txt   (o <out>/<curso>.txt con --txt)
 ```
 
-## Piezas clave
+## Capa de red
 
-| Función | Qué hace | Nota |
-|---|---|---|
-| `goto_cf` | Navega y espera a que pase el challenge "Just a moment" de Cloudflare | hasta 20 s |
-| `api_get` | Ejecuta `fetch()` **dentro de la página** (same-origin, con cookies) y parsea JSON | así atraviesa Cloudflare; no mira el status HTTP |
-| `ensure_login` | Valida sesión con `users/me` | |
-| `list_courses` | `--list`: cursos suscritos, paginado | |
-| `resolve_course_id` | URL/slug/id → id numérico | acepta URLs `/learn/lecture/...` |
-| `fetch_curriculum` | Temario completo con captions | |
-| `pick_caption` / `vtt_to_text` | Selección de idioma y limpieza del VTT | |
+- `Client.get()` ejecuta `fetch()` **dentro de la página** (same-origin, con cookies), lo que
+  atraviesa Cloudflare, y devuelve un `ApiResult(status, text, retry_after)`.
+- `with_retries()` reintenta status 0 (red), 429 y 5xx con backoff exponencial (1, 2, 4 s…;
+  `Retry-After` manda si existe). La página de verificación de Cloudflare no se reintenta.
+- `raise_for_status()` traduce el status a un error con mensaje (`NotLoggedInError`,
+  `AccessDeniedError`, `NotFoundError`, `BlockedError`, `ApiError`). La CLI los imprime y sale con 1.
+- Los `.vtt` (CDN firmado) se bajan con `context.request.get`, también con reintentos.
 
-## Supuestos que hoy atan la herramienta a Udemy individual
+## Tests
 
-1. `API = "https://www.udemy.com/api-2.0"` está fijo (línea 56).
-2. `ensure_login` y el fallback de `resolve_course_id` navegan a `https://www.udemy.com/...`.
-3. La cookie de `--token` se inyecta solo en `.udemy.com` con el flujo de login de www.
+`FakePage.evaluate()` devuelve respuestas guiadas y `FakeContext.request.get()` sirve archivos,
+así que todo el flujo (cliente, temario, resolución de curso, descarga) se prueba sin navegador.
+Lo único que no cubren es el navegador real: ver la prueba manual de cada fase en el plan.
 
-Como `api_get` hace `fetch` same-origin, si la página está en `www.udemy.com`, las llamadas
-nunca llevan las cookies de sesión de `seti.udemy.com` (Udemy Business) → `users/me` falla
-o devuelve un usuario anónimo, y el curso no aparece entre los suscritos.
+## Límites actuales
 
-Ver el plan de cambios en [PLAN.md](PLAN.md).
+1. El formato de salida es solo `.txt` (Markdown, marcas de tiempo y `--update` llegan en la Fase 3).
+2. Udemy Business: el host sale de la URL, pero `--business`, la cookie de `--token` en el
+   dominio del portal y el mensaje de «Empezar curso» se completan en la Fase 2.
+3. El modo `--txt` escribe al final: una interrupción pierde lo acumulado (la reanudación llega con el manifest).

@@ -16,24 +16,23 @@ if (-not $py) {
     exit 1
 }
 
-# 2) entorno aislado + script
+# 2) entorno aislado + paquete (instala tambien Playwright)
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
-Copy-Item (Join-Path $SrcDir "udemy_transcripts.py") (Join-Path $AppDir "udemy_transcripts.py") -Force
+Remove-Item (Join-Path $AppDir "udemy_transcripts.py") -Force -ErrorAction SilentlyContinue  # script suelto de versiones anteriores
 
 Write-Host "  - Creando entorno virtual..."
 python -m venv $Venv
 & (Join-Path $Venv "Scripts\python.exe") -m pip install --upgrade pip | Out-Null
-Write-Host "  - Instalando Playwright..."
-& (Join-Path $Venv "Scripts\pip.exe") install playwright | Out-Null
+Write-Host "  - Instalando udemy-transcripts y Playwright..."
+& (Join-Path $Venv "Scripts\python.exe") -m pip install --upgrade $SrcDir | Out-Null
 Write-Host "  - Descargando Chromium (~170 MB, puede tardar)..."
 & (Join-Path $Venv "Scripts\python.exe") -m playwright install chromium
 
 # 3) comando global `udemy` (udemy.cmd en una carpeta del PATH del usuario)
 $BinDir = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps"   # ya suele estar en el PATH
 if (-not (Test-Path $BinDir)) { $BinDir = $AppDir }
-$pyExe = Join-Path $Venv "Scripts\python.exe"
-$script = Join-Path $AppDir "udemy_transcripts.py"
-$cmd = "@echo off`r`n`"$pyExe`" `"$script`" %*"
+$udemyExe = Join-Path $Venv "Scripts\udemy.exe"
+$cmd = "@echo off`r`n`"$udemyExe`" %*"
 Set-Content -Path (Join-Path $BinDir "udemy.cmd") -Value $cmd -Encoding ascii
 
 Write-Host ""

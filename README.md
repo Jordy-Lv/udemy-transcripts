@@ -59,9 +59,10 @@ Se abre una ventana de Chromium. **Inicia sesión en Udemy ahí.** La sesión qu
 
 | Modo | Resultado |
 |------|-----------|
-| normal | `~/Udemy-Transcripts/<curso>/001 - título.txt`, `002 - …` (un archivo por video) |
+| normal | `~/Udemy-Transcripts/<curso>/<NN - sección>/<NNN - lección>.txt` (una carpeta por sección y un archivo por video, con la numeración de Udemy) |
 | `--txt` | `~/Udemy-Transcripts/<curso>.txt` (todo el curso en uno) |
 
+Por ejemplo: `~/Udemy-Transcripts/Mi curso/01 - Introducción/001 - Bienvenida.txt`.
 Cambia la carpeta base con `--out RUTA` o con la variable de entorno `UDEMY_OUT`.
 
 ---
@@ -79,6 +80,16 @@ Cambia la carpeta base con `--out RUTA` o con la variable de entorno `UDEMY_OUT`
 
 ---
 
+## Errores y reintentos
+
+- Los fallos transitorios (HTTP 429/5xx, red) se reintentan solos con espera creciente.
+- Si no hay sesión, no estás inscrito en el curso o Cloudflare bloquea la petición, la herramienta
+  termina con un mensaje claro y código de salida 1 (ya no acaba en «Listo: 0»).
+- Si el idioma pedido no existe para una lección se avisa: `usando en_US, no hay es`.
+- Si ninguna transcripción se pudo guardar, el código de salida es 1.
+
+---
+
 ## Cómo funciona
 
 1. Abre Chromium con tu sesión de Udemy.
@@ -86,7 +97,19 @@ Cambia la carpeta base con `--out RUTA` o con la variable de entorno `UDEMY_OUT`
 3. Descarga el archivo de subtítulos (`.vtt`) de cada video.
 4. Lo limpia y lo guarda como `.txt`.
 
-Solo necesita la librería estándar de Python + Playwright.
+Solo necesita Playwright (el instalador lo incluye). Diseño interno: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md);
+hoja de ruta: [docs/PLAN.md](docs/PLAN.md).
+
+---
+
+## Desarrollo
+
+```bash
+python -m venv .venv && .venv/bin/pip install -e ".[dev]"    # en Windows: .venv\Scripts\pip
+.venv/bin/python -m pytest                                    # tests sin red
+```
+
+`python udemy_transcripts.py ...` sigue funcionando desde el repositorio (envoltorio del paquete).
 
 ---
 
