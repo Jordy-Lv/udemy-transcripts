@@ -5,6 +5,7 @@ Descarga las **transcripciones (subtítulos)** de todos los videos de un curso d
 - Convierte los subtítulos a **párrafos legibles** con **marcas de tiempo que enlazan al segundo exacto del vídeo**.
 - Cada lección lleva cabecera YAML (curso, sección, URL, duración, idioma…) y el curso un `README.md` índice: compatible con Obsidian, Notion y VS Code.
 - Descarga también los **artículos** (convertidos a Markdown) y los **recursos de todo tipo** que deja el instructor (PDF, código, zips…), por curso completo, por rangos o por **ruta de aprendizaje**.
+- **Estudio con IA** (opcional): `--study` genera un resumen por sección y flashcards listas para **Anki**, con la API de Claude o con prompts para pegar en un chat.
 - Tres salidas: **un archivo por video**, **todo el curso en un solo archivo** (con tabla de contenidos) o el `.txt` clásico.
 - **`--update`** descarga solo lo nuevo o cambiado y reanuda una descarga cortada.
 - Usa un navegador real (Playwright) para reutilizar tu sesión y atravesar la protección Cloudflare de Udemy.
@@ -207,6 +208,50 @@ se aplican a cada curso de la ruta.
 
 ---
 
+## Estudio con IA: resúmenes y flashcards
+
+`--study` convierte lo descargado en material de repaso, **por sección**:
+
+```
+<curso>/
+  flashcards.csv                      todas las tarjetas del curso (para importarlas de una vez en Anki)
+  02 - Introducción a Spring boot/
+    RESUMEN.md                        ideas clave, conceptos, código y comandos mencionados, preguntas de repaso
+    flashcards.csv                    pregunta;respuesta;etiquetas
+```
+
+Dos modos:
+
+| Modo | Qué hace | Coste |
+|---|---|---|
+| `--study api` | Llama a la API de Claude con **tu clave**, una petición por sección (las muy largas se parten). **Antes de empezar estima los tokens y el coste y pide confirmación** (`--yes` para aceptar). | El de la API (p. ej. ≈ 5 USD el curso de 35 h con `claude-opus-5-5`; usa `--ai-model claude-sonnet-5-5` o `claude-haiku-5-5` para gastar menos) |
+| `--study prompt` | Escribe en `prompts/` un archivo por sección, listo para pegar en Claude o ChatGPT con tu suscripción. Tú guardas las respuestas. | Ninguno |
+
+```bash
+udemy --update --study prompt "<url>"                 # descarga lo que falte y genera los prompts
+udemy --study api --ai-model claude-sonnet-5-5 "<url>"
+udemy --study api --study-from ~/Udemy-Transcripts/Mi\ curso --sections 2-4   # sin abrir Udemy
+```
+
+- **Requisitos del modo `api`:** `pip install "udemy-transcripts[ai]"` (Python 3.10+) y credenciales de
+  Anthropic (`ANTHROPIC_API_KEY`, o `ant auth login`). Modelo por defecto: `claude-opus-5-5`
+  (`--ai-model`). Usa salida estructurada (JSON con esquema) y esfuerzo `low`; en los modelos que lo
+  admiten activa el *fallback* del servidor, de modo que si el modelo rechaza una petición, Anthropic la
+  repite con otro.
+- **Caché:** `.estudio/<sección>.json` guarda lo generado con la huella del texto, el modelo y la versión
+  de las instrucciones. Si repites el comando solo se regeneran las secciones cuyo texto cambió
+  (`--regenerate` lo fuerza). Si una sección falla, las demás se conservan y se reintenta solo esa.
+- **Anki:** `flashcards.csv` lleva las directivas `#separator:semicolon`, `#html:false` y
+  `#tags column:3`, sin fila de cabecera: *Archivo → Importar* y listo. Cada tarjeta lleva además la
+  etiqueta `seccion-NN`.
+- **Fidelidad:** los prompts piden trabajar solo con lo que dicen las transcripciones y no inventar
+  código; aun así el resultado de un modelo puede tener errores: revísalo antes de memorizarlo.
+- **Privacidad:** con `--study api` el texto de las lecciones **sale hacia la API de Anthropic**. Comprueba
+  que las condiciones de tu curso o de tu empresa (en Udemy Business, el contrato de tu organización) lo
+  permiten; `--study prompt` también obliga a pegar ese texto en un chat. Úsalo solo para estudio personal.
+
+---
+
 ## Opciones
 
 | Flag | Para qué |
@@ -221,6 +266,10 @@ se aplican a cada curso de la ruta.
 | `--max-size TAM` | Omite archivos más grandes (default `500MB`) |
 | `--yes` | No pedir confirmación cuando los recursos pesan mucho |
 | `--sections R` / `--lectures R` | Solo estas secciones / lecciones (`3-5,8`, `12-`) |
+| `--study api\|prompt` | Resumen y flashcards por sección con IA (ver «Estudio con IA») |
+| `--ai-model MODELO` | Modelo de `--study api` (default `claude-opus-5-5`) |
+| `--study-from CARPETA` | Estudia un curso ya descargado, sin abrir el navegador |
+| `--regenerate` | Ignora la caché del estudio |
 | `--no-timestamps` | Sin marcas de tiempo al inicio de los párrafos |
 | `--ts-every SEG` | Como mucho una marca de tiempo cada SEG segundos (default: una por párrafo) |
 | `--list` | Lista tus cursos suscritos (con su id) y termina |
@@ -249,6 +298,7 @@ se aplican a cada curso de la ruta.
 3. Descarga el archivo de subtítulos (`.vtt`) de cada video.
 4. Lo agrupa en párrafos con marcas de tiempo y lo guarda como Markdown (o `.txt`).
 5. Convierte los artículos y, con `--resources`, descarga los adjuntos.
+6. Con `--study`, genera resúmenes y flashcards por sección.
 
 Solo necesita Playwright (el instalador lo incluye). Diseño interno: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md);
 hoja de ruta: [docs/PLAN.md](docs/PLAN.md).
@@ -258,7 +308,7 @@ hoja de ruta: [docs/PLAN.md](docs/PLAN.md).
 ## Desarrollo
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"    # en Windows: .venv\Scripts\pip
+python -m venv .venv && .venv/bin/pip install -e ".[dev,ai]"    # en Windows: .venv\Scripts\pip
 .venv/bin/python -m pytest                                    # tests sin red
 ```
 

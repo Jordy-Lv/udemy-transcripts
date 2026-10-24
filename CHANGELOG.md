@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.6.0 — Fase 5: estudio con IA
+
+### Novedades
+- **`--study api|prompt`**: por sección genera `RESUMEN.md` (ideas clave, conceptos, código y comandos
+  mencionados, preguntas de repaso) y `flashcards.csv` listo para Anki (`;`, etiquetas en la 3.ª columna,
+  directivas `#separator`/`#tags column`), más un `flashcards.csv` del curso entero.
+- **Modo `api`** (`pip install "udemy-transcripts[ai]"`, Python 3.10+): una llamada a la API de Claude por
+  sección (las de más de ~100 000 tokens se parten en partes), salida JSON validada por esquema
+  (`output_config.format`), esfuerzo `low`, fallback del servidor en los modelos que lo admiten. Modelo
+  configurable con `--ai-model` (default `claude-opus-5-5`).
+  - **Estima tokens y coste antes de enviar nada y pide confirmación** (`--yes`); sin terminal y sin
+    `--yes` se detiene. Avisa de que el texto sale hacia la API.
+  - Errores: los que se repetirían en todas las secciones (credenciales, petición inválida) detienen el
+    proceso; los demás (rechazo, límite de peticiones, respuesta truncada) se anotan y se sigue.
+- **Modo `prompt`**: `prompts/<sección>[ - parte N].md` listos para pegar en un chat, sin coste, y `LEEME.md`.
+- **Caché** por sección (`.estudio/*.json`) con la huella del texto, el modelo y la versión de las
+  instrucciones: solo se regenera lo que cambió (`--regenerate` lo ignora); también restaura los archivos
+  borrados sin gastar nada.
+- **`--study-from CARPETA`**: estudia un curso ya descargado sin abrir el navegador ni Udemy.
+- `--study` funciona también dentro de una ruta de aprendizaje (por curso) y respeta `--sections`/`--lectures`.
+
+### Decisiones
+- La caché es propia del estudio (huella del texto limpio) en vez de colgar del manifest: así cubre también
+  los cambios de modelo o de instrucciones.
+- El texto que se envía es el limpio (sin cabecera YAML, marcas de tiempo, enlaces, escapes ni recursos).
+
+### Interno
+- Módulos nuevos `study` y `ai`; `ai` importa el SDK solo al usarse. 281 tests sin red (cliente simulado).
+
+### Verificado
+- En vivo (seti.udemy.com): `--update --study prompt` sobre el curso de 298 lecciones → 18 prompts; `--study api`
+  sin `--yes` muestra «18 llamadas, ~558 700 tokens de entrada, coste estimado ≈ $4.75» y se detiene antes de
+  enviar nada.
+- Con el SDK real (`anthropic` 2.3.0) y un transporte simulado (sin red): las peticiones de `AnthropicBackend`
+  son válidas (`output_config` con `format` + `effort`, `fallbacks: "default"` con la beta
+  `server-side-fallback-2026-07-01`; sin esos campos en los modelos que no los admiten).
+
+### Sin verificar
+- **Ninguna llamada real a la API de Claude** (no se usó ninguna clave): la calidad de los resúmenes y las
+  tarjetas, el coste real frente a la estimación (chars/3,3 por token + 7 000 tokens de salida por llamada)
+  y el fallback del servidor están sin probar en vivo.
+
 ## 0.5.0 — Fase 4: todo el material del curso
 
 ### Novedades

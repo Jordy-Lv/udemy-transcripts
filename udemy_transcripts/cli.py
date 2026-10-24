@@ -16,6 +16,7 @@ from . import __version__
 from .client import Client, ensure_login
 from .courses import course_info, list_courses, resolve_course_id
 from .curriculum import fetch_curriculum
+from .ai import DEFAULT_MODEL
 from .download import download_course
 from .errors import BlockedError, NotLoggedInError, UdemyError
 from .manifest import MANIFEST_NAME, Manifest
@@ -25,6 +26,7 @@ from .ranges import make_selector, parse_ranges
 from .render import markdown, txt
 from .render.common import RenderOptions
 from .resources import DEFAULT_MAX_SIZE, ResourceOptions, parse_size, parse_types
+from .study import StudyOptions, study_course
 from .util import fs_path, safe_name
 
 PROFILE_DIR = Path.home() / ".cache" / "udemy-transcripts-profile"
@@ -84,6 +86,17 @@ def build_parser():
                      help="omite archivos más grandes (default 500MB), p. ej. 200MB o 2GB")
     res.add_argument("--yes", action="store_true",
                      help="no pedir confirmación cuando los recursos pesan mucho")
+    study = ap.add_argument_group("estudio con IA")
+    study.add_argument("--study", choices=("api", "prompt"),
+                       help="genera RESUMEN.md y flashcards.csv (Anki) por sección: «api» "
+                            "usa la API de Claude (estima el coste y pide confirmación); "
+                            "«prompt» escribe prompts para pegar en un chat, sin coste")
+    study.add_argument("--ai-model", default=DEFAULT_MODEL, metavar="MODELO",
+                       help=f"modelo de --study api (default {DEFAULT_MODEL})")
+    study.add_argument("--study-from", metavar="CARPETA",
+                       help="estudia un curso ya descargado, sin abrir el navegador ni Udemy")
+    study.add_argument("--regenerate", action="store_true",
+                       help="ignora la caché y vuelve a generar el estudio")
     ap.add_argument("--headless", action="store_true",
                     help="(NO recomendado: Udemy bloquea el modo headless con Cloudflare)")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -111,6 +124,19 @@ def resource_options(args):
         enabled=args.resources or only, only=only, types=parse_types(args.resource_types),
         max_size=parse_size(args.max_size) if args.max_size else DEFAULT_MAX_SIZE,
         assume_yes=args.yes)
+
+
+def study_options(args):
+    """Opciones de --study (o None) y comprobación de combinaciones imposibles."""
+    if not args.study:
+        if args.study_from:
+            raise UdemyError("--study-from necesita --study api o --study prompt.")
+        return None
+    if args.txt or args.single:
+        raise UdemyError("--study trabaja con las lecciones por archivo: no lo combines con "
+                         "--single ni --txt.")
+    return StudyOptions(mode=args.study, model=args.ai_model, regenerate=args.regenerate,
+                        assume_yes=args.yes)
 
 
 def selector_from_args(args):
@@ -148,6 +174,7 @@ class Job:
     res: ResourceOptions
     select: Optional[object]
     update: bool
+    study: Optional[StudyOptions] = None
 
 
 def download_one(client, course_id, job, base, course_dir=None, log=print):
@@ -171,6 +198,9 @@ def download_one(client, course_id, job, base, course_dir=None, log=print):
     stats = download_course(client, course, sections, job.langs, job.opts, course_dir,
                             job.single, job.update, manifest, log=log, select=job.select,
                             res=job.res)
+    if job.study and stats.ok:
+        log("• Material de estudio…")
+        study_course(course_dir, course.title, job.study, select=job.select, log=log)
     output = course_dir
     if job.single and stats.saved:
         output = course_dir.parent / f"{safe_name(course.title)}.{job.opts.ext}"
@@ -253,6 +283,11 @@ def run(args):
     opts, single = options_from_args(args)
     res = resource_options(args)
     select = selector_from_args(args)
+    study = study_options(args)
+    if args.study_from:                       # sin navegador: solo lo ya descargado
+        course_dir = Path(args.study_from)
+        study_course(course_dir, course_dir.resolve().name, study, select=select)
+        return 0
     if args.headless:
         print("⚠ Aviso: Udemy suele bloquear el modo headless (Cloudflare). "
               "Si falla, ejecútalo sin --headless.")
@@ -272,7 +307,7 @@ def run(args):
                          "portal (https://<org>.udemy.com/learning-paths/<id>/).")
 
     base = Path(args.out) if args.out else Path(os.environ.get("UDEMY_OUT") or DEFAULT_OUT)
-    job = Job(langs, opts, single, res, select, args.update)
+    job = Job(langs, opts, single, res, select, args.update, study)
 
     with _import_playwright()() as pw:
         context = _launch(pw, args, portal)
@@ -313,7 +348,7 @@ def main(argv=None):
             pass
     ap = build_parser()
     args = ap.parse_args(argv)
-    if not args.do_list and not args.course:
+    if not args.do_list and not args.course and not args.study_from:
         ap.error("indica la URL/ID del curso, o usa --list para ver tus cursos.")
     try:
         return run(args)

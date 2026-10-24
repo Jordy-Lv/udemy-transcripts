@@ -159,7 +159,8 @@ Dos modos:
    pegar en Claude/ChatGPT con tu suscripción.
 
 Se procesa por sección para respetar límites de contexto, y se cachea para no
-regenerar lo que no cambió (usa el manifest de la fase 3).
+regenerar lo que no cambió (en la práctica: caché propia `.estudio/` con la huella del texto, el
+modelo y la versión de las instrucciones, en vez de colgar del manifest).
 
 ## Fase 6 — Extras y pulido
 
