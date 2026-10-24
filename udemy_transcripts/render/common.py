@@ -13,6 +13,7 @@ class RenderOptions:
     timestamps: bool = True
     ts_every: int = 0           # 0 = una marca por párrafo
     width: int = 100            # solo txt; 0 = sin ajustar
+    second_lang: str = ""       # --lang a+b: etiqueta de la 2.ª columna (bilingüe)
     pause: float = PAUSE
     max_chars: int = MAX_CHARS
 

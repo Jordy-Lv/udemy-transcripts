@@ -6,9 +6,12 @@ Descarga las **transcripciones (subtítulos)** de todos los videos de un curso d
 - Cada lección lleva cabecera YAML (curso, sección, URL, duración, idioma…) y el curso un `README.md` índice: compatible con Obsidian, Notion y VS Code.
 - Descarga también los **artículos** (convertidos a Markdown) y los **recursos de todo tipo** que deja el instructor (PDF, código, zips…), por curso completo, por rangos o por **ruta de aprendizaje**.
 - **Estudio con IA** (opcional): `--study` genera un resumen por sección y flashcards listas para **Anki**, con la API de Claude o con prompts para pegar en un chat.
+- **Subtítulos bilingües** (`--lang es+en`): cada párrafo con su traducción alineada por tiempo, útil para aprender inglés técnico.
 - Tres salidas: **un archivo por video**, **todo el curso en un solo archivo** (con tabla de contenidos) o el `.txt` clásico.
 - **`--update`** descarga solo lo nuevo o cambiado y reanuda una descarga cortada.
 - Usa un navegador real (Playwright) para reutilizar tu sesión y atravesar la protección Cloudflare de Udemy.
+
+**Índice:** [Instalación](#instalación) · [Uso](#uso) · [Recetas](#recetas) · [Dónde se guardan](#dónde-se-guardan) · [Recursos, rangos y rutas](#recursos-rangos-y-rutas-de-aprendizaje) · [Bilingüe](#subtítulos-bilingües) · [Estudio con IA](#estudio-con-ia-resúmenes-y-flashcards) · [Opciones](#opciones) · [Problemas frecuentes](#problemas-frecuentes)
 
 > ⚠️ **Uso responsable:** descarga solo cursos a los que **tú tienes acceso** y úsalo para estudio personal. No redistribuyas el contenido.
 
@@ -16,7 +19,7 @@ Descarga las **transcripciones (subtítulos)** de todos los videos de un curso d
 
 ## Requisitos
 
-- **Python 3.8+**
+- **Python 3.8+** (3.10+ solo si usas `--study api`)
 - ~300 MB libres (Playwright descarga su propio Chromium)
 - Una cuenta de Udemy con el curso comprado/disponible
 
@@ -38,7 +41,16 @@ cd udemy-transcripts
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-El instalador crea un entorno aislado (no toca tu Python del sistema) y deja el comando global **`udemy`**. Si la terminal no lo reconoce, reiníciala (o añade la carpeta indicada al PATH).
+El instalador crea un entorno aislado (no toca tu Python del sistema), descarga Chromium y deja el comando global **`udemy`**. Si la terminal no lo reconoce, reiníciala (o añade la carpeta indicada al PATH).
+
+| Opción (bash / PowerShell) | Para qué |
+|---|---|
+| `--with-ai` / `-WithAI` | Instala también el SDK de Anthropic (para `--study api`; exige Python 3.10+) |
+| `--skip-browser` / `-SkipBrowser` | No descarga Chromium (ya lo tienes o lo harás luego) |
+| `--uninstall` / `-Uninstall` | Borra el entorno y el comando; **no** toca tus descargas ni tu sesión de Udemy |
+| `UDEMY_APP_DIR`, `UDEMY_BIN_DIR` / `-AppDir`, `-BinDir` | Dónde se instala el entorno y el comando |
+
+Para **actualizar**, haz `git pull` y vuelve a ejecutar el instalador. Comprueba la versión con `udemy --version`.
 
 ---
 
@@ -54,6 +66,23 @@ udemy --resources "https://www.udemy.com/course/mi-curso/"   # + PDFs, código y
 ```
 
 Puedes pasarle la URL de la página del curso **o** la del reproductor (`/learn/lecture/...`), o directamente el id numérico.
+
+### Recetas
+
+```bash
+udemy --list                                                  # ¿qué cursos tengo y cuál es su id?
+udemy "<url>"                                                 # lo básico: Markdown con índice
+udemy --update "<url>"                                        # volver a lanzarlo: solo lo nuevo o cambiado
+udemy --resources --update "<url>"                            # lecciones + PDFs, código y adjuntos
+udemy --lang es+en "<url>"                                    # texto en español con el inglés debajo
+udemy --sections 3-5 --lectures 40- "<url>"                   # solo una parte
+udemy --single --no-timestamps "<url>"                        # todo en un archivo, sin marcas de tiempo
+udemy --format txt --width 80 "<url>"                         # texto plano a 80 columnas
+udemy --update --study prompt "<url>"                         # prompts para pegar en un chat (gratis)
+udemy --study api --ai-model claude-sonnet-5-5 "<url>"        # resumen y flashcards con la API
+udemy --business miempresa --list                             # cursos de tu Udemy Business
+udemy "https://miempresa.udemy.com/learning-paths/<id>/"      # toda una ruta de aprendizaje
+```
 
 ### Udemy Business
 
@@ -208,6 +237,31 @@ se aplican a cada curso de la ruta.
 
 ---
 
+## Subtítulos bilingües
+
+`--lang es+en` descarga **dos pistas** del mismo vídeo y las junta por tiempo: el texto principal es el
+primer idioma y debajo de cada párrafo va el mismo tramo en el segundo.
+
+```markdown
+[00:00](https://…/learn/lecture/26140426?start=0) Hola y bienvenido a este curso. En este curso, aprenderá todo sobre Amazon Web Services…
+
+> **en** · Hello and welcome to this course. In this course you're going to learn all about Amazon Web Services…
+```
+
+- **Alineación:** cada cue de la segunda pista va al párrafo en cuya ventana de tiempo cae su punto medio,
+  así que no importa que las dos pistas partan las frases de forma distinta.
+- **Formatos:** en Markdown, un bloque `> **en** · …` bajo cada párrafo; en `.txt`, una línea con sangría
+  `    ↳ en: …`. La cabecera YAML añade `idioma_secundario` y el índice muestra `es_ES + en_US`.
+- **Qué pasa si falta una pista:** una lección sin la segunda pista sale en un solo idioma y se avisa
+  (`sin pista en`); si la descarga de la segunda falla, se avisa y `--update` lo reintenta.
+- **Idiomas disponibles:** depende del curso. Algunos solo traen uno (los de ejemplo, `es_LA`); otros traen
+  decenas de pistas, a veces traducidas automáticamente (se marcan «(automático)»). Usa los códigos de
+  idioma (`es`, `en`, `pt_BR`, `fr`…). Con un par, ese idioma pasa a ser la primera preferencia; puedes
+  añadir alternativas: `--lang es+en,pt`.
+- El estudio con IA (`--study`) **no** envía la segunda columna al modelo.
+
+---
+
 ## Estudio con IA: resúmenes y flashcards
 
 `--study` convierte lo descargado en material de repaso, **por sección**:
@@ -273,11 +327,45 @@ udemy --study api --study-from ~/Udemy-Transcripts/Mi\ curso --sections 2-4   # 
 | `--no-timestamps` | Sin marcas de tiempo al inicio de los párrafos |
 | `--ts-every SEG` | Como mucho una marca de tiempo cada SEG segundos (default: una por párrafo) |
 | `--list` | Lista tus cursos suscritos (con su id) y termina |
-| `--lang es,en` | Orden de preferencia del idioma del subtítulo (default `es,en`) |
+| `--lang es,en` | Orden de preferencia del idioma del subtítulo (default `es,en`); `es+en` = bilingüe |
 | `--out RUTA` | Carpeta base de salida (default `~/Udemy-Transcripts`) |
 | `--width N` | Ancho de línea (solo `--format txt`); `0` = no ajustar (default `100`) |
 | `--business ORG` | Organización de Udemy Business (`miempresa` para `miempresa.udemy.com`); también `UDEMY_BUSINESS` |
-| `--token TOK` | `access_token` de la cookie, para evitar el login manual (avanzado) |
+| `--token TOK` | `access_token` de la cookie, para evitar el login manual (avanzado; también `UDEMY_TOKEN`) |
+| `--headless` | No recomendado: Udemy bloquea el modo sin ventana con Cloudflare |
+| `--version` | Muestra la versión |
+
+---
+
+### Variables de entorno
+
+| Variable | Equivale a |
+|---|---|
+| `UDEMY_OUT` | `--out` (carpeta base) |
+| `UDEMY_BUSINESS` | `--business` |
+| `UDEMY_TOKEN` | `--token` |
+| `ANTHROPIC_API_KEY` | Credencial de `--study api` (o inicia sesión con `ant auth login`) |
+
+### Códigos de salida
+
+`0` todo bien (o hay lecciones nuevas/ya vigentes) · `1` error o no se pudo guardar nada · `2` argumentos
+inválidos · `130` interrumpido con Ctrl-C (lo ya descargado se conserva: sigue con `--update`).
+
+---
+
+## Problemas frecuentes
+
+| Síntoma | Qué hacer |
+|---|---|
+| «Cloudflare bloqueó la petición» | Ejecuta con la ventana visible (sin `--headless`) y espera a que termine la verificación. |
+| «La sesión no es válida o caducó» | Vuelve a lanzar el comando: se abre Chromium y inicias sesión de nuevo. |
+| «Sin acceso al temario… Empezar curso» (Business) | Abre el curso una vez en el portal y pulsa **Empezar curso**; repite. |
+| «No hay sesión y no puedo pedir el login sin terminal» | Lanza el comando una vez desde una terminal interactiva (o usa `--token`). |
+| La descarga se cortó | Repite el mismo comando con `--update`: continúa donde quedó. |
+| Un archivo de recursos no se guardó | Mira el aviso (`HTTP 403 ¿URL caducada?`, tamaño > `--max-size`) y repite con `--update`/`--max-size`. |
+| `FileNotFoundError` o rutas largas en Windows | La herramienta ya usa rutas largas; si instalas en una carpeta muy profunda, usa `-AppDir C:\udemy`. |
+| `--study api` pide `--yes` | No hay terminal para confirmar el envío a la API: añade `--yes` si aceptas el coste estimado. |
+| Los subtítulos salen en otro idioma | Se avisa en el log (`usando en_US, no hay es`); revisa `--lang`. |
 
 ---
 

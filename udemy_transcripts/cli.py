@@ -17,6 +17,7 @@ from .client import Client, ensure_login
 from .courses import course_info, list_courses, resolve_course_id
 from .curriculum import fetch_curriculum
 from .ai import DEFAULT_MODEL
+from .captions import parse_lang_spec
 from .download import download_course
 from .errors import BlockedError, NotLoggedInError, UdemyError
 from .manifest import MANIFEST_NAME, Manifest
@@ -48,7 +49,9 @@ def build_parser():
     ap.add_argument("--token", default=os.environ.get("UDEMY_TOKEN"),
                     help="access_token de la cookie (evita el login manual; o env UDEMY_TOKEN)")
     ap.add_argument("--lang", default="es,en",
-                    help="idiomas del subtítulo por orden de preferencia (default es,en)")
+                    help="idiomas del subtítulo por orden de preferencia (default es,en); "
+                         "con es+en el texto sale bilingüe: español con la pista en inglés "
+                         "alineada por tiempo debajo de cada párrafo")
     ap.add_argument("--out", default=None,
                     help="carpeta base (default: $UDEMY_OUT o ~/Udemy-Transcripts)")
     ap.add_argument("--format", choices=("md", "txt"), default="md",
@@ -103,10 +106,6 @@ def build_parser():
     return ap
 
 
-def parse_langs(value):
-    return [x.strip() for x in (value or "").split(",") if x.strip()]
-
-
 def options_from_args(args):
     """Opciones de render y modo (archivo único) a partir de los argumentos."""
     fmt, single = args.format, args.single
@@ -115,7 +114,8 @@ def options_from_args(args):
     if args.width < 0 or args.ts_every < 0:
         raise UdemyError("--width y --ts-every no pueden ser negativos.")
     return RenderOptions(format=fmt, timestamps=not args.no_timestamps,
-                         ts_every=args.ts_every, width=args.width), single
+                         ts_every=args.ts_every, width=args.width,
+                         second_lang=parse_lang_spec(args.lang).secondary or ""), single
 
 
 def resource_options(args):
@@ -293,7 +293,7 @@ def run(args):
               "Si falla, ejecútalo sin --headless.")
     if args.update and single and not args.do_list:
         print("⚠ Aviso: --update no aplica a --single/--txt; se regenera el archivo completo.")
-    langs = parse_langs(args.lang)
+    langs = parse_lang_spec(args.lang)
     portal = choose_portal(args.course, args.business)
     if args.business and host_from_ref(args.course) and \
             host_from_ref(args.course) != choose_portal(None, args.business).host:

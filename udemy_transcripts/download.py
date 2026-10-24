@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Optional
 
 from . import resources as res_mod
-from .captions import parse_vtt, pick_caption
+from .captions import LangSpec, parse_vtt, pick_caption, pick_secondary
 from .errors import UdemyError
 from .html2md import extract_images, html_to_markdown
 from .manifest import caption_signature
-from .paragraphs import build_paragraphs
+from .paragraphs import attach_translation, build_paragraphs
 from .render import markdown, txt
 from .resources import Outcome, ResourceOptions
 from .util import fs_path, safe_name
@@ -43,6 +43,11 @@ def _lecture_rel_path(section, lecture, opts):
     return f"{section.dirname}/{lecture.number} - {safe_name(lecture.title)}.{opts.ext}"
 
 
+def _caption_signature(caption, caption2=None):
+    """Huella de las pistas usadas: cambia si se sube otra versión o se pide otro idioma."""
+    return caption_signature(caption) + (f"+{caption_signature(caption2)}" if caption2 else "")
+
+
 def _fingerprint(outcomes, links, images):
     """Resume qué adjuntos acompañan a la lección: si cambian, hay que reescribirla."""
     if not (outcomes or links or images):
@@ -58,14 +63,17 @@ def _resources_text(opts, outcomes, links, prefix):
     return txt.resources_text(outcomes, links)
 
 
-def _render_video(course, section, lecture, caption, cues, opts, single, extra):
+def _render_video(course, section, lecture, caption, cues, opts, single, extra,
+                  caption2=None, cues2=None):
     paragraphs = build_paragraphs(cues, opts.pause, opts.max_chars)
+    if cues2:
+        attach_translation(paragraphs, cues2)
     if opts.format == "md":
         if single:
             return markdown.single_part(course, section, lecture, caption, paragraphs, opts,
-                                        extra)
+                                        extra, caption2)
         return markdown.lecture_document(course, section, lecture, caption, paragraphs, opts,
-                                         extra)
+                                         extra, caption2)
     text = txt.with_resources(txt.paragraphs_to_text(paragraphs, opts), extra)
     if single:
         return txt.single_part(lecture.number, section.dirname, safe_name(lecture.title), text)
@@ -139,6 +147,7 @@ def download_course(client, course, sections, langs, opts, course_dir=None, sing
     qué lecciones se procesan (rangos `--sections`/`--lectures`).
     """
     res = res or ResourceOptions()
+    spec = langs if isinstance(langs, LangSpec) else LangSpec(list(langs))
     stats = Stats()
     lessons = [(s, lec) for s in sections for lec in s.lectures
                if (lec.is_video or lec.is_article) and (select is None or select(s, lec))]
@@ -191,19 +200,21 @@ def download_course(client, course, sections, langs, opts, course_dir=None, sing
             # 3) ¿sigue vigente? (--update)
             rel = _lecture_rel_path(section, lec, opts)
             if lec.is_article:
-                caption, preferred = None, True
+                caption, caption2, preferred = None, None, True
                 signature = "article:" + hashlib.sha1(lec.body.encode("utf-8")).hexdigest()[:16]
                 if not lec.body.strip():
                     log(f"  – {label}: artículo vacío")
                     stats.empty += 1
                     continue
             else:
-                caption, preferred = pick_caption(lec.captions, langs)
+                caption, preferred = pick_caption(lec.captions, spec.prefs)
                 if not caption:
                     log(f"  – {label}: sin subtítulos")
                     stats.no_captions += 1
                     continue
-                signature = caption_signature(caption)
+                caption2 = pick_secondary(lec.captions, spec.secondary, caption) \
+                    if spec.secondary else None
+                signature = _caption_signature(caption, caption2)
             fp = _fingerprint(outcomes, links, images)
             render_sig = opts.signature + (f"|res={fp}" if fp else "")
             if (not single and update and manifest.up_to_date(
@@ -232,11 +243,24 @@ def download_course(client, course, sections, langs, opts, course_dir=None, sing
                         f"(HTTP {result.status}){hint}")
                     stats.failed += 1
                     continue
+                cues2 = None
+                if caption2:
+                    result2 = client.download_text(caption2["url"], "el subtítulo secundario")
+                    if result2.ok:
+                        cues2 = parse_vtt(result2.text)
+                    else:
+                        log(f"  ⚠ {label}: no se pudo bajar la pista {caption2.get('locale_id')} "
+                            f"(HTTP {result2.status}); solo {caption.get('locale_id')}")
+                        caption2 = None
                 block = _render_video(course, section, lec, caption, parse_vtt(result.text),
-                                      opts, single, extra)
+                                      opts, single, extra, caption2, cues2)
                 vtt_hash = hashlib.sha256(result.text.encode("utf-8")).hexdigest()
                 locale = caption.get("locale_id")
-                note = "" if preferred else f" — usando {locale}, no hay {langs[0]}"
+                note = "" if preferred else f" — usando {locale}, no hay {spec.prefs[0]}"
+                if caption2:
+                    locale += f" + {caption2.get('locale_id')}"
+                elif spec.secondary:
+                    note += f" — sin pista {spec.secondary}"
 
             # 5) escribir y apuntar
             if single:
@@ -252,9 +276,11 @@ def download_course(client, course, sections, langs, opts, course_dir=None, sing
                 if lec.id:
                     manifest.set(lec.id, {
                         "file": rel, "kind": "article" if lec.is_article else "video",
-                        "locale": locale if lec.is_video else "",
+                        "locale": caption.get("locale_id") if lec.is_video else "",
+                        "locale2": caption2.get("locale_id") if caption2 else "",
                         "source": (caption or {}).get("source") or "",
-                        "caption": signature, "render": render_sig, "vtt_sha256": vtt_hash,
+                        "caption": _caption_signature(caption, caption2) if caption else signature,
+                        "render": render_sig, "vtt_sha256": vtt_hash,
                         "title": lec.title, "section": section.title,
                         "duration": lec.duration})
                     manifest.save()

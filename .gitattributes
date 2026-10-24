@@ -1,0 +1,4 @@
+# Los scripts de shell deben llevar siempre saltos de línea LF (con CRLF bash falla).
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.py text eol=lf

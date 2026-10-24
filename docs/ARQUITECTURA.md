@@ -1,6 +1,6 @@
 # Arquitectura de udemy-transcripts
 
-> Estado: **Fase 5 (0.6.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
+> Estado: **1.0.0 (plan completado)**. El diseño original de un solo script (`9a21915`) se reorganizó
 > en un paquete; el plan de cambios está en [PLAN.md](PLAN.md) y la API en [API.md](API.md).
 
 ## Estructura
@@ -18,8 +18,8 @@ udemy_transcripts/
   study.py        --study: secciones de lo descargado, prompts, caché, estimación de coste, resumen y CSV de Anki
   ai.py           backend de la API de Claude (salida estructurada, fallback, errores); el SDK es opcional
   paths.py        rutas de aprendizaje (Business): cursos de la ruta e índice
-  captions.py     parser WebVTT por bloques → Cue(start, end, text); elección de idioma
-  paragraphs.py   cues → párrafos (pausa 2,5 s / ~400 car.) y qué párrafos llevan marca de tiempo
+  captions.py     parser WebVTT por bloques → Cue(start, end, text); elección de idioma y de la 2.ª pista (--lang es+en)
+  paragraphs.py   cues → párrafos (pausa 2,5 s / ~400 car.), marcas de tiempo y alineación de la 2.ª lengua
   manifest.py     .udemy-transcripts.json: estado por lección para --update y reanudar
   download.py     bucle de descarga: recursos → imágenes → ¿vigente? → render → escribe + manifest
   render/         common (opciones, tiempos), markdown (lección, artículo, README, enlaces, archivo único),
@@ -76,5 +76,7 @@ Lo único que no cubren es el navegador real: ver la prueba manual de cada fase 
 3. Los recursos se leen enteros en memoria (Playwright no hace streaming): por eso `--max-size`
    (500MB por defecto). Los tamaños se sondean con `Range: bytes=0-0`; si el servidor lo ignora se baja el archivo.
 4. En una ruta de aprendizaje la confirmación de tamaño se pide por curso, no para toda la ruta.
-5. El estudio con IA usa estimaciones (caracteres/3,3 por token); el coste real puede variar. Una sección con
+5. Bilingüe: la 2.ª pista se alinea con los párrafos de la 1.ª por el punto medio de cada cue; si falta o su
+   descarga falla, la lección sale en un solo idioma (y `--update` lo reintenta porque la huella cambia).
+6. El estudio con IA usa estimaciones (caracteres/3,3 por token); el coste real puede variar. Una sección con
    más de ~100 000 tokens se parte en partes sin una llamada final que las una.

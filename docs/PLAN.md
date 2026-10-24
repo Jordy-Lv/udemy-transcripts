@@ -1,6 +1,6 @@
 # Plan de evolución de udemy-transcripts
 
-> Creado: 2026-10-24 · Estado: **aprobado (2026-10-24)**
+> Creado: 2026-10-24 · Estado: **completado (1.0.0)** — las fases 0-6 están implementadas y verificadas en vivo salvo lo anotado en el CHANGELOG («Sin verificar») y en [API.md](API.md)
 > Objetivo: soportar **Udemy Business** y convertir la herramienta en un **kit de estudio completo**.
 > Curso de ejemplo (Business): `https://seti.udemy.com/course/java-spring-boot-guia-definitiva/learn/lecture/51621647?start=255#overview`
 
@@ -12,13 +12,13 @@ Cómo funciona hoy: ver [ARQUITECTURA.md](ARQUITECTURA.md).
 
 | Fase | Contenido | Resultado |
 |---|---|---|
-| **0** | Verificación en vivo de la API de Business | Endpoints confirmados antes de programar |
-| **1** | Base: paquete, tests, reintentos, bugs B1–B7 | Código mantenible y fiable |
-| **2** | Soporte **Udemy Business** | `udemy "<url de seti>"` funciona |
-| **3** | Salida de estudio: **Markdown, marcas de tiempo, párrafos, `--update`** | Apuntes legibles y enlazados al vídeo |
-| **4** | Más contenido: **artículos, recursos de todo tipo (PDF, zip, código…), rangos, rutas de aprendizaje** | Todo el material del curso |
-| **5** | **Resúmenes y flashcards con IA** (opcional) | Repaso activo / Anki |
-| **6** | Extras: subtítulos bilingües, empaquetado, documentación final | Pulido |
+| **0** ✓ | Verificación en vivo de la API de Business | Endpoints confirmados antes de programar |
+| **1** ✓ | Base: paquete, tests, reintentos, bugs B1–B7 | Código mantenible y fiable |
+| **2** ✓ | Soporte **Udemy Business** | `udemy "<url de seti>"` funciona |
+| **3** ✓ | Salida de estudio: **Markdown, marcas de tiempo, párrafos, `--update`** | Apuntes legibles y enlazados al vídeo |
+| **4** ✓ | Más contenido: **artículos, recursos de todo tipo (PDF, zip, código…), rangos, rutas de aprendizaje** | Todo el material del curso |
+| **5** ✓ | **Resúmenes y flashcards con IA** (opcional) | Repaso activo / Anki |
+| **6** ✓ | Extras: subtítulos bilingües, empaquetado, documentación final | Pulido |
 
 Cada fase termina con tests en verde, prueba manual con el curso de ejemplo,
 README/CHANGELOG actualizados y un commit (o PR) propio.
@@ -165,7 +165,7 @@ modelo y la versión de las instrucciones, en vez de colgar del manifest).
 ## Fase 6 — Extras y pulido
 
 - **Subtítulos bilingües** (`--lang es+en`): dos columnas/bloques alineados por tiempo,
-  útil para aprender inglés técnico.
+  útil para aprender inglés técnico. *(Hecho: bloque bajo cada párrafo; ver README.)*
 - Instaladores (`install.ps1`/`install.sh`) basados en `pip install .` en vez de copiar el script.
 - README completo con ejemplos de todas las opciones, `CHANGELOG.md`, `docs/API.md`.
 

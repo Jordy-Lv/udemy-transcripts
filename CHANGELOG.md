@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.0.0 — Fase 6: bilingüe, instaladores y pulido (plan completado)
+
+### Novedades
+- **Subtítulos bilingües** (`--lang es+en`): descarga dos pistas y las alinea por tiempo (cada cue de la
+  segunda va al párrafo en cuya ventana cae su punto medio). Markdown: bloque `> **en** · …` bajo cada
+  párrafo; `.txt`: línea `    ↳ en: …`. Cabecera `idioma_secundario`, índice `es_ES + en_US`. Sin la segunda
+  pista la lección sale en un idioma y se avisa; si su descarga falla, `--update` lo reintenta. Admite
+  alternativas (`--lang es+en,pt`). `--study` no envía la segunda columna al modelo.
+- **Instaladores revisados** (`install.sh`, `install.ps1`): comprueban la versión de Python (3.8+; 3.10+ con
+  `--with-ai`/`-WithAI`), detectan el alias vacío de la Microsoft Store, **comprueban el código de salida de cada
+  paso** (antes un fallo de pip en PowerShell pasaba inadvertido), admiten `--skip-browser`, `--uninstall`
+  y rutas configurables, y el de bash funciona también en Git Bash. Actualizar = `git pull` + volver a
+  ejecutar el instalador (pip reinstala la carpeta aunque la versión no cambie).
+- `.gitattributes`: los `.sh` se quedan siempre con saltos LF (con CRLF bash falla al clonar en Windows).
+- README completo: índice, recetas con todas las opciones, instalación, bilingüe, variables de entorno,
+  códigos de salida y tabla de problemas frecuentes. `docs/API.md` pasa a ser la referencia de lo que usa la
+  herramienta (endpoint → módulo) y de lo que sigue sin verificar.
+
+### Verificado en vivo (seti.udemy.com, 2026-10-24)
+- `--lang es+en --sections 1 --lectures 1-3` sobre el curso de AWS (pistas `es_ES` automática y `en_US`):
+  3 lecciones con el inglés alineado bajo cada párrafo.
+- Instaladores: `install.ps1` en Windows PowerShell 5.1 (instalar, `-WithAI`, reinstalar, desinstalar) e
+  `install.sh` en Git Bash (instalar, opción desconocida, desinstalar), siempre en carpetas temporales.
+
+### Sin verificar
+- `install.sh` en macOS/Linux reales; la instalación con `-AppDir` de más de ~100 caracteres en Windows sin rutas largas
+  activadas falla por el límite de 260 caracteres de pip (el instalador lo explica).
+- Lo listado en `docs/API.md` → «Pendiente de verificar», y la API de Anthropic con una clave real.
+
+### Interno
+- 302 tests sin red. `Paragraph` gana `end` y `other`; nuevos `LangSpec`, `parse_lang_spec`, `pick_secondary`,
+  `attach_translation`.
+
+> La versión 1.0.0 marca el plan original como completado; no promete que la API interna de Udemy
+> (no pública) siga igual: ver «Riesgos» en `docs/PLAN.md`.
+
 ## 0.6.0 — Fase 5: estudio con IA
 
 ### Novedades

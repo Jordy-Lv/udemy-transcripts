@@ -62,6 +62,8 @@ entre…?» y detalles prácticos. «etiquetas»: 1-3 palabras clave en minúscu
 # ---------------------------------------------------------------------------------
 _TS_MD = re.compile(r"^(?:\[\d{1,2}:\d{2}(?::\d{2})?\]\([^)]*\)|`\[\d{1,2}:\d{2}(?::\d{2})?\]`) ?")
 _TS_TXT = re.compile(r"^\[\d{1,2}:\d{2}(?::\d{2})?\] ")
+_SECOND_MD = re.compile(r"^> \*\*[^*\n]+\*\* · ")      # bilingüe: 2.ª lengua en Markdown
+_SECOND_TXT = re.compile(r"^ {4}↳ ")                      # ... y en texto plano
 _MD_ESCAPED = re.compile(r"\\([\\`*_\[\]<>$#+\-.)(])")
 
 
@@ -74,7 +76,7 @@ def clean_lesson_text(raw):
         if end != -1:
             text = text[end + 5:]
     text = re.split(r"\n(?:## Recursos|RECURSOS)\n", text)[0]
-    out, in_fence, seen_title, meta_pending = [], False, False, False
+    out, in_fence, seen_title, meta_pending, in_second = [], False, False, False, False
     for line in text.split("\n"):
         if line.startswith("```"):
             in_fence = not in_fence
@@ -86,6 +88,12 @@ def clean_lesson_text(raw):
                 meta_pending = False
                 if line.startswith("> "):
                     continue                              # línea de metadatos bajo el título
+            if _SECOND_MD.match(line) or _SECOND_TXT.match(line):
+                in_second = True                          # la traducción no se envía al modelo
+                continue
+            if in_second and line.startswith("      "):
+                continue                                  # continuación de esa línea
+            in_second = False
             line = _TS_TXT.sub("", _TS_MD.sub("", line))
             line = _MD_ESCAPED.sub(r"\1", line)
         out.append(line)

@@ -4,6 +4,9 @@ import html
 import re
 from collections import namedtuple
 from dataclasses import dataclass
+from typing import Optional
+
+from .errors import UdemyError
 
 _TIME = re.compile(r"(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{3})")
 _TIMING = re.compile(r"^\s*(\S+)\s+-->\s+(\S+)")
@@ -82,3 +85,40 @@ def pick_caption(captions, langs):
             matches.sort(key=lambda c: c.get("source") == "auto")   # estable
             return Pick(matches[0], rank == 0)
     return Pick(usable[0], not langs)
+
+
+@dataclass
+class LangSpec:
+    """Idiomas pedidos: preferencias en orden y, opcionalmente, una 2.ª pista (bilingüe)."""
+    prefs: list
+    secondary: Optional[str] = None
+
+
+def parse_lang_spec(value):
+    """`es,en` → preferencias; `es+en` → texto en es con la pista en como segunda columna.
+
+    El par bilingüe pasa a ser la primera preferencia; solo se admite uno.
+    """
+    prefs, secondary = [], None
+    for token in (value or "").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "+" in token:
+            first, second = (part.strip() for part in token.split("+", 1))
+            if not first or not second or "+" in second or secondary is not None:
+                raise UdemyError(f"--lang: «{token}» no es válido. Usa un solo par, p. ej. es+en.")
+            prefs.insert(0, first)
+            secondary = second
+        else:
+            prefs.append(token)
+    return LangSpec(prefs, secondary)
+
+
+def pick_secondary(captions, want, primary):
+    """Pista de `want` distinta de la principal (o None); prefiere la manual a la automática."""
+    primary_locale = (primary or {}).get("locale_id")
+    matches = [c for c in captions or [] if c.get("url") and c.get("locale_id") != primary_locale
+               and _locale_matches(c.get("locale_id"), want)]
+    matches.sort(key=lambda c: c.get("source") == "auto")
+    return matches[0] if matches else None

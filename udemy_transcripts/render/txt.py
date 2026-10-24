@@ -8,6 +8,9 @@ from ..paragraphs import marked
 from .common import fmt_time
 
 
+MARK = "↳"        # marca de la 2.ª lengua en el modo bilingüe
+
+
 def paragraphs_to_text(paragraphs, opts):
     blocks = []
     pairs = marked(paragraphs, opts.ts_every) if opts.timestamps \
@@ -18,6 +21,15 @@ def paragraphs_to_text(paragraphs, opts):
             lines[0] = f"[{fmt_time(paragraph.start)}] {lines[0]}"
         if opts.width and opts.width > 0:
             lines = [textwrap.fill(line, opts.width) for line in lines]
+        if paragraph.other:
+            label = f"{MARK} {opts.second_lang or '→'}: "
+            other = " ".join(paragraph.other.split())
+            if opts.width and opts.width > 0:
+                other = textwrap.fill(other, opts.width, initial_indent="    " + label,
+                                      subsequent_indent=" " * (4 + len(label)))
+            else:
+                other = "    " + label + other
+            lines.append(other)
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 

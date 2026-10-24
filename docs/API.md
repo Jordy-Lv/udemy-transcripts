@@ -1,6 +1,6 @@
 # API interna de Udemy (verificada en Udemy Business)
 
-> Verificado el 2026-10-24 en `https://seti.udemy.com` (Udemy Business, SSO) con una sesión real.
+> Verificado el 2026-10-24 en `https://seti.udemy.com` (Udemy Business, SSO) con una sesión real; actualizado al terminar la Fase 6 con lo que la herramienta usa y lo que sigue sin probar.
 > Curso de prueba: *Java: Spring Boot - Guía definitiva* (`id 6737997`).
 > La API **no es pública** y puede cambiar. Todo lo de abajo se probó con `fetch()` same-origin
 > desde una página del portal, con `credentials: 'include'` y `Accept: application/json`.
@@ -141,20 +141,49 @@ El plan asumía un 403 («pulsa Empezar curso»): la herramienta conserva ese me
 (Business + 403 en el temario), pero no es lo que se observó aquí. Sigue sin verificarse si los
 recursos (`File`) de un curso no inscrito se descargan.
 
-## Efectos sobre el plan
+## Cómo usa la herramienta cada endpoint
 
-| Fase | Ajuste |
-|---|---|
-| 1 | VTT con `\r\n` y cues multilínea → confirma B4. `api_get` debe devolver `status` (los 403/404 devuelven `{"detail": ...}` y hoy se leen como datos válidos) |
-| 2 | Sin cambios: mismo `/api-2.0` en el host del portal. `--list` solo con `subscribed-courses` (la otra lista está vacía) |
-| 3 | `source: auto/manual` y `locale_id` disponibles para la cabecera YAML; `time_estimation` para duración |
-| 4 | Endpoint de rutas **resuelto** (`sections/?fields...items`). Solo `course` es descargable. Recursos `File` y `ExternalLink` confirmados |
-| 6 | Los cursos del ejemplo solo tienen un idioma (`es_LA`): para probar `--lang es+en` hace falta otro curso con varias pistas |
+| Qué | Endpoint / petición | Módulo |
+|---|---|---|
+| Sesión | `GET users/me/?fields[user]=title` (401/403 o `id` 0 = sin sesión) | `client.current_user` |
+| Mis cursos | `GET users/me/subscribed-courses/?page_size=100&ordering=-last_accessed` (+ `subscription-course-enrollments/` en Business, mejor esfuerzo) | `courses.list_courses` |
+| Resolver un curso | `subscribed-courses` por slug; si no, landing `/course/<slug>/` y candidatos (`data-clp-course-id`…) validados con `courses/<id>/?fields[course]=url` | `courses.resolve_course_id` |
+| Título y slug | `GET courses/<id>/?fields[course]=title,url` | `courses.course_info` |
+| Temario | `GET courses/<id>/subscriber-curriculum-items/?page_size=200&fields[…]` (paginado; incluye `captions`, `body`, `supplementary_assets`, `download_urls`) | `curriculum.fetch_curriculum` |
+| Subtítulo | `GET <caption.url>` (CDN firmado) con `context.request`, sin cookies | `client.download_text` |
+| Archivo adjunto | `GET <download_urls…file>` (CDN firmado); tamaño previo con `Range: bytes=0-0` → 206 y `Content-Range: bytes 0-0/<total>` | `resources.probe_size`, `client.download_bytes` |
+| Imagen de artículo | `GET https://img-c.udemycdn.com/redactor/...` (público) | `resources.download_images` |
+| Ruta de aprendizaje | `GET learning-paths/<id>/` y `learning-paths/<id>/sections/?page_size=9999&fields[learning_path_section]=id,title,description,items&fields[learning_path_section_has_item]=…content…` | `paths.fetch_learning_path` |
+
+`fields[...]` exactos del temario: lecture `title,object_index,asset,supplementary_assets` · chapter
+`title,object_index` · asset `asset_type,captions,title,time_estimation,body,filename,download_urls,external_url` ·
+caption `url,locale_id,video_label,file_name,source`.
+
+## Hallazgos que condicionan el diseño
+
+- **Mismo API en www y en Business**, pero la sesión solo vale en el host del portal: todas las llamadas
+  salen de una página de ese host (`fetch` same-origin, con cookies). Los CDN firmados no necesitan cookies.
+- **Las URLs firmadas caducan** (`Expires`/`secure=…,<timestamp>`): se piden del temario justo antes de bajarlas.
+- **Una sola pista por vídeo en muchos cursos** (`es_LA`), pero otros traen decenas: el curso de AWS de la ruta
+  de ejemplo trae 28 idiomas (`es_ES`, `en_US`, `pt_BR`…), varios con `source: "auto"` (traducción automática).
+  `--lang es+en` usa dos de ellas.
+- **El temario y los subtítulos de un curso no inscrito se pueden leer** en algunos cursos (el de AWS CLF-C02);
+  en otros (`AWS Certified Cloud Practitioner Practice Exams`) el temario responde 403 y hace falta pulsar
+  «Empezar curso». La herramienta no asume ninguno de los dos casos.
+- **Los VTT usan `\r\n`** y cortan las frases entre cues: el parser trabaja por bloques de cue y conserva los tiempos.
+- **Las lecciones son solo `Video` o `Article`** en los 202 cursos revisados; los adjuntos son `File` (60+
+  extensiones), `ExternalLink` y algún `Video` suelto.
+- **`time_estimation`** es segundos de vídeo; en los artículos es el tiempo de lectura estimado.
+- **Rutas de aprendizaje:** el portal usa `sections/?fields[…]=…items…`; `sections/<id>/items/` responde 403.
+  Solo los ítems `related_object_type == "course"` se pueden descargar (los `lab` y las evaluaciones no
+  tienen temario ni subtítulos).
 
 ## Pendiente de verificar
 
-- `subscription-course-enrollments` devuelve 0 aunque haya 202 cursos suscritos: no se sabe qué lista.
-- Captions de un curso no inscrito (ver arriba).
-- Cuota/límite de peticiones (`429`): no se alcanzó con ~15 llamadas; el backoff de la Fase 1 sigue siendo necesario.
-- Cloudflare con Playwright/Chromium propio: aquí se usó el navegador integrado de la app y no hubo challenge;
-  la herramienta real sigue necesitando ventana visible (no probado en esta fase).
+- `subscription-course-enrollments` devuelve 0 en la cuenta de prueba aunque haya 202 cursos suscritos: no se
+  conoce el formato de sus filas (la herramienta acepta el curso en la fila o anidado en `course`).
+- `--token` en Business (no se probó con un token real) y el regreso al login con cuenta personal en www.udemy.com.
+- Cuota/límite de peticiones (`429`): no se alcanzó con unos cientos de llamadas; el backoff sigue haciendo falta.
+- Descarga de archivos de varios cientos de MB (Playwright los carga enteros en memoria).
+- Imágenes y bloques de código de artículos reales (los del curso de prueba no los traen).
+- La API de Anthropic del modo `--study api` no se ha usado con una clave real.

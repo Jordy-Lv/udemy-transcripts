@@ -5,7 +5,7 @@ import json
 from ..paragraphs import marked
 from ..resources import link_path
 from .common import fmt_time
-from .mdtext import md_escape
+from .mdtext import escape_inline, md_escape
 
 
 def _yaml(value):
@@ -27,6 +27,8 @@ def paragraphs_to_markdown(paragraphs, course, lecture, opts):
             stamp = fmt_time(paragraph.start)
             url = course.lecture_url(lecture.id, paragraph.start)
             text = f"[{stamp}]({url}) {text}" if url else f"`[{stamp}]` {text}"
+        if paragraph.other:
+            text += f"\n\n> **{opts.second_lang or '→'}** · {escape_inline(paragraph.other.strip())}"
         blocks.append(text)
     return "\n\n".join(blocks)
 
@@ -49,23 +51,30 @@ def resources_block(outcomes, links, prefix=""):
     return "## Recursos\n\n" + "\n".join(lines) if lines else ""
 
 
-def _meta_line(course, lecture, caption, with_section=None):
+def _locales(caption, caption2):
+    """«es_LA (automático) + en_US» para la línea de metadatos."""
+    def one(c):
+        return c["locale_id"] + (" (automático)" if c.get("source") == "auto" else "")
+    names = [one(c) for c in (caption, caption2) if c and c.get("locale_id")]
+    return " + ".join(names)
+
+
+def _meta_line(course, lecture, caption, with_section=None, caption2=None):
     bits = [with_section] if with_section else []
     if lecture.is_article:
         if lecture.duration:
             bits.append(f"lectura {reading_time(lecture.duration)}")
     elif lecture.duration:
         bits.append(fmt_time(lecture.duration))
-    if caption and caption.get("locale_id"):
-        auto = " (automático)" if caption.get("source") == "auto" else ""
-        bits.append(f"{caption['locale_id']}{auto}")
+    if _locales(caption, caption2):
+        bits.append(_locales(caption, caption2))
     url = course.lecture_url(lecture.id)
     if url:
         bits.append(f"[Abrir en Udemy]({url})")
     return "> " + " · ".join(bits) if bits else ""
 
 
-def _front_matter(course, section, lecture, caption):
+def _front_matter(course, section, lecture, caption, caption2=None):
     fm = ["---",
           f"curso: {_yaml(course.title)}",
           f"seccion: {_yaml(section.title)}",
@@ -82,16 +91,21 @@ def _front_matter(course, section, lecture, caption):
         if lecture.duration:
             fm.append(f"duracion: {_yaml(fmt_time(lecture.duration))}")
         fm.append(f"idioma: {_yaml((caption or {}).get('locale_id') or '')}")
+        if caption2:
+            fm.append(f"idioma_secundario: {_yaml(caption2.get('locale_id') or '')}")
         fm.append("subtitulo_automatico: "
                   f"{'true' if (caption or {}).get('source') == 'auto' else 'false'}")
     fm.append("---")
     return "\n".join(fm)
 
 
-def lecture_document(course, section, lecture, caption, paragraphs, opts, resources_md=""):
+def lecture_document(course, section, lecture, caption, paragraphs, opts, resources_md="",
+                     caption2=None):
     """Archivo `.md` de una lección de vídeo."""
-    parts = [_front_matter(course, section, lecture, caption), f"# {md_escape(lecture.title)}"]
-    meta = _meta_line(course, lecture, caption, with_section=md_escape(section.dirname))
+    parts = [_front_matter(course, section, lecture, caption, caption2),
+             f"# {md_escape(lecture.title)}"]
+    meta = _meta_line(course, lecture, caption, with_section=md_escape(section.dirname),
+                      caption2=caption2)
     parts += [meta, paragraphs_to_markdown(paragraphs, course, lecture, opts), resources_md]
     return "\n\n".join(p for p in parts if p) + "\n"
 
@@ -132,7 +146,8 @@ def course_index(course, sections, entries, has_resources=False):
             if entry:
                 if entry.get("locale") and lec.is_video:
                     bits.append(entry["locale"] + (" (automático)"
-                                                   if entry.get("source") == "auto" else ""))
+                                                   if entry.get("source") == "auto" else "")
+                                + (f" + {entry['locale2']}" if entry.get("locale2") else ""))
                 lines.append(f"- [{md_escape(label)}]({link_path(entry['file'])})"
                              + (" — " + " · ".join(bits) if bits else ""))
             else:
@@ -167,12 +182,13 @@ def _lecture_anchor(lecture):
     return f"lec-{lecture.id or lecture.number}"
 
 
-def single_part(course, section, lecture, caption, paragraphs, opts, resources_md=""):
+def single_part(course, section, lecture, caption, paragraphs, opts, resources_md="",
+                caption2=None):
     """Bloque de una lección de vídeo dentro del archivo único."""
     return "\n\n".join(filter(None, [
         f'<a id="{_lecture_anchor(lecture)}"></a>',
         f"### {lecture.number} - {md_escape(lecture.title)}",
-        _meta_line(course, lecture, caption),
+        _meta_line(course, lecture, caption, caption2=caption2),
         paragraphs_to_markdown(paragraphs, course, lecture, opts),
         resources_md.replace("## Recursos", "#### Recursos", 1) if resources_md else ""]))
 
