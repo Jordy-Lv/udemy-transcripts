@@ -9,6 +9,7 @@
 import argparse
 import os
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -112,6 +113,9 @@ def build_parser():
     merge.add_argument("--merge-words", type=int, default=MAX_WORDS, metavar="N",
                        help=f"palabras máximas por archivo unificado (default {MAX_WORDS}; "
                             "NotebookLM admite ~500000); 0 = no dividir")
+    ap.add_argument("--menu", action="store_true",
+                    help="abre el menú interactivo (también se abre al ejecutar «udemy» sin "
+                         "argumentos en una terminal)")
     ap.add_argument("--headless", action="store_true",
                     help="(NO recomendado: Udemy bloquea el modo headless con Cloudflare)")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -187,6 +191,29 @@ def _import_playwright():
                          "    pip3 install playwright\n"
                          "    python3 -m playwright install chromium")
     return sync_playwright
+
+
+@contextmanager
+def open_client(args, portal):
+    """Abre el navegador con tu sesión, comprueba el login y entrega el `Client`."""
+    with _import_playwright()() as pw:
+        context = _launch(pw, args, portal)
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+            client = Client(context, page, portal)
+            print("• Comprobando sesión…")
+            ensure_login(client)
+            yield client
+        finally:
+            context.close()
+
+
+def print_courses(client):
+    rows = list_courses(client)
+    print(f"\nTienes {len(rows)} cursos:\n")
+    for c in rows:
+        print(f"  [{c['id']}] {c['title']}")
+    return rows
 
 
 @dataclass
@@ -351,35 +378,30 @@ def run(args):
         print("⚠ Aviso: --resources-only no descarga lecciones; no hay nada que unificar.")
     job = Job(langs, opts, single, res, select, args.update, study, merge, args.merge_words)
 
-    with _import_playwright()() as pw:
-        context = _launch(pw, args, portal)
-        try:
-            page = context.pages[0] if context.pages else context.new_page()
-            client = Client(context, page, portal)
+    with open_client(args, portal) as client:
+        if args.do_list:
+            print_courses(client)
+            print("\nDescarga uno con:  udemy <id-o-URL>")
+            return 0
 
-            print("• Comprobando sesión…")
-            ensure_login(client)
+        fs_path(base).mkdir(parents=True, exist_ok=True)
+        if path_id:
+            return download_path(client, path_id, job, base)
 
-            if args.do_list:
-                rows = list_courses(client)
-                print(f"\nTienes {len(rows)} cursos:\n")
-                for c in rows:
-                    print(f"  [{c['id']}] {c['title']}")
-                print("\nDescarga uno con:  udemy <id-o-URL>")
-                return 0
-
-            fs_path(base).mkdir(parents=True, exist_ok=True)
-            if path_id:
-                return download_path(client, path_id, job, base)
-
-            print("• Resolviendo curso…")
-            course_id = resolve_course_id(client, args.course)
-            _, stats, output = download_one(client, course_id, job, base)
-        finally:
-            context.close()
+        print("• Resolviendo curso…")
+        course_id = resolve_course_id(client, args.course)
+        _, stats, output = download_one(client, course_id, job, base)
 
     report(stats, output, job)
     return 0 if stats.ok else 1
+
+
+def _interactive():
+    """¿Hay una persona delante? (entrada y salida son una terminal)."""
+    try:
+        return sys.stdin.isatty() and sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        return False
 
 
 def main(argv=None):
@@ -390,6 +412,9 @@ def main(argv=None):
             pass
     ap = build_parser()
     args = ap.parse_args(argv)
+    if args.menu or (argv is None and len(sys.argv) == 1 and _interactive()):
+        from .menu import run_menu
+        return run_menu()
     if not (args.do_list or args.course or args.study_from or args.merge_from):
         ap.error("indica la URL/ID del curso, o usa --list para ver tus cursos.")
     try:
