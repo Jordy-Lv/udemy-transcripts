@@ -163,21 +163,11 @@ def load_manifest(course_dir):
 def collect_sections(course_dir, manifest, select=None):
     """Secciones con el texto limpio de sus lecciones descargadas (vídeos y artículos)."""
     grouped = {}
-    for entry in manifest.entries.values():
-        rel = entry.get("file") or ""
-        parts = rel.split("/")
-        if len(parts) != 2:
-            continue
-        dirname, name = parts
-        m = re.match(r"(\d+) - ", dirname)
-        n = re.match(r"(\d+) - (.*)\.(?:md|txt)$", name)
-        path = fs_path(Path(course_dir) / rel)
-        if not (m and n and path.is_file()):
-            continue
-        section = grouped.setdefault(dirname, StudySection(int(m.group(1)), dirname,
-                                                           entry.get("section") or dirname))
-        lesson = StudyLesson(n.group(1), entry.get("title") or n.group(2),
-                             clean_lesson_text(path.read_text(encoding="utf-8")), rel)
+    for item in manifest.downloaded(course_dir):
+        section = grouped.setdefault(item.dirname, StudySection(
+            item.section_index, item.dirname, item.entry.get("section") or item.dirname))
+        lesson = StudyLesson(item.number, item.entry.get("title") or item.name,
+                             clean_lesson_text(item.path.read_text(encoding="utf-8")), item.rel)
         if lesson.text and (select is None or select(SimpleNamespace(index=section.index),
                                                      SimpleNamespace(index=lesson.index))):
             section.lessons.append(lesson)

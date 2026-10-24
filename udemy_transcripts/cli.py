@@ -1,6 +1,7 @@
 """Línea de comandos: argumentos y orquestación.
 
     udemy <url|slug|id> [--format md|txt] [--single] [--update] [--lang es,en] [--out DIR]
+    udemy --merge <url>               (carpeta por lecciones + un .md con todo el curso)
     udemy <url de una ruta de aprendizaje>
     udemy --list
 """
@@ -21,6 +22,7 @@ from .captions import parse_lang_spec
 from .download import download_course
 from .errors import BlockedError, NotLoggedInError, UdemyError
 from .manifest import MANIFEST_NAME, Manifest
+from .merge import MAX_WORDS, merge_course
 from .paths import course_folder, fetch_learning_path, learning_path_id, path_index
 from .portal import choose_portal, host_from_ref, token_cookie
 from .ranges import make_selector, parse_ranges
@@ -100,6 +102,16 @@ def build_parser():
                        help="estudia un curso ya descargado, sin abrir el navegador ni Udemy")
     study.add_argument("--regenerate", action="store_true",
                        help="ignora la caché y vuelve a generar el estudio")
+    merge = ap.add_argument_group("unificar (NotebookLM, Notion…)")
+    merge.add_argument("--merge", action="store_true",
+                       help="además de la carpeta por lecciones, genera <curso>.md con TODO el "
+                            "curso en un solo Markdown (herramientas que no aceptan carpetas); "
+                            "se divide en partes si es muy largo y se regenera con --update")
+    merge.add_argument("--merge-from", metavar="CARPETA",
+                       help="unifica un curso ya descargado, sin abrir el navegador ni Udemy")
+    merge.add_argument("--merge-words", type=int, default=MAX_WORDS, metavar="N",
+                       help=f"palabras máximas por archivo unificado (default {MAX_WORDS}; "
+                            "NotebookLM admite ~500000); 0 = no dividir")
     ap.add_argument("--headless", action="store_true",
                     help="(NO recomendado: Udemy bloquea el modo headless con Cloudflare)")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -139,6 +151,18 @@ def study_options(args):
                         assume_yes=args.yes)
 
 
+def merge_options(args):
+    """¿Hay que unificar? y comprobación de combinaciones imposibles."""
+    if not (args.merge or args.merge_from):
+        return False
+    if args.txt or args.single or args.format == "txt":
+        raise UdemyError("--merge unifica Markdown: no lo combines con --single, --txt ni "
+                         "--format txt.")
+    if args.merge_words < 0:
+        raise UdemyError("--merge-words no puede ser negativo.")
+    return True
+
+
 def selector_from_args(args):
     sections = parse_ranges(args.sections, "--sections")
     lectures = parse_ranges(args.lectures, "--lectures")
@@ -175,6 +199,8 @@ class Job:
     select: Optional[object]
     update: bool
     study: Optional[StudyOptions] = None
+    merge: bool = False
+    merge_words: int = MAX_WORDS
 
 
 def download_one(client, course_id, job, base, course_dir=None, log=print):
@@ -201,6 +227,13 @@ def download_one(client, course_id, job, base, course_dir=None, log=print):
     if job.study and stats.ok:
         log("• Material de estudio…")
         study_course(course_dir, course.title, job.study, select=job.select, log=log)
+    if job.merge and stats.ok and not job.res.only:
+        log("• Curso unificado…")
+        try:
+            stats.merged = merge_course(course_dir, select=job.select,
+                                        max_words=job.merge_words, log=log)
+        except UdemyError as exc:
+            log(f"  ⚠ No pude unificar el curso: {exc}")
     output = course_dir
     if job.single and stats.saved:
         output = course_dir.parent / f"{safe_name(course.title)}.{job.opts.ext}"
@@ -236,6 +269,8 @@ def report(stats, output, job):
     if stats.orphans:
         print(f"  ⚠ {len(stats.orphans)} archivo(s) antiguo(s) se conservan "
               "(la lección cambió de nombre o de sección).")
+    for merged in stats.merged:
+        print(f"  Unificado: {merged}")
     if stats.ok:
         print(f"  {'Archivo' if Path(output).suffix in ('.md', '.txt') else 'Carpeta'}: {output}")
     if stats.errors and not job.update:
@@ -284,9 +319,14 @@ def run(args):
     res = resource_options(args)
     select = selector_from_args(args)
     study = study_options(args)
-    if args.study_from:                       # sin navegador: solo lo ya descargado
-        course_dir = Path(args.study_from)
-        study_course(course_dir, course_dir.resolve().name, study, select=select)
+    merge = merge_options(args)
+    if args.study_from or args.merge_from:    # sin navegador: solo lo ya descargado
+        if args.study_from:
+            course_dir = Path(args.study_from)
+            study_course(course_dir, course_dir.resolve().name, study, select=select)
+        if args.merge_from:
+            print("• Curso unificado…")
+            merge_course(Path(args.merge_from), select=select, max_words=args.merge_words)
         return 0
     if args.headless:
         print("⚠ Aviso: Udemy suele bloquear el modo headless (Cloudflare). "
@@ -307,7 +347,9 @@ def run(args):
                          "portal (https://<org>.udemy.com/learning-paths/<id>/).")
 
     base = Path(args.out) if args.out else Path(os.environ.get("UDEMY_OUT") or DEFAULT_OUT)
-    job = Job(langs, opts, single, res, select, args.update, study)
+    if merge and res.only:
+        print("⚠ Aviso: --resources-only no descarga lecciones; no hay nada que unificar.")
+    job = Job(langs, opts, single, res, select, args.update, study, merge, args.merge_words)
 
     with _import_playwright()() as pw:
         context = _launch(pw, args, portal)
@@ -348,7 +390,7 @@ def main(argv=None):
             pass
     ap = build_parser()
     args = ap.parse_args(argv)
-    if not args.do_list and not args.course and not args.study_from:
+    if not (args.do_list or args.course or args.study_from or args.merge_from):
         ap.error("indica la URL/ID del curso, o usa --list para ver tus cursos.")
     try:
         return run(args)

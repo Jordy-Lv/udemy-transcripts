@@ -29,6 +29,7 @@ class Stats:
     files_failed: int = 0
     items: list = field(default_factory=list)     # (sección, lección, bloque) del archivo único
     orphans: list = field(default_factory=list)   # archivos antiguos que se conservan
+    merged: list = field(default_factory=list)    # archivos del curso unificado (--merge)
 
     @property
     def ok(self):
