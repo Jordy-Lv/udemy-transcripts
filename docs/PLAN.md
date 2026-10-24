@@ -112,7 +112,8 @@ Al inicio de cada párrafo (o cada `--ts-every 60` s):
 
 ### 3.3 Párrafos naturales
 El parser VTT conserva los tiempos de cada cue. Nuevo párrafo cuando hay una pausa
-mayor a ~1,5 s o cuando el párrafo supera cierto largo y termina en punto.
+de 2,5 s o más o cuando el párrafo supera ~400 caracteres y termina en punto
+(valores medidos con subtítulos reales; con 1,5 s / 500 salían demasiados párrafos de una frase).
 Si el subtítulo es automático y no tiene puntuación, se corta solo por pausas.
 
 ### 3.4 `--update` / reanudar

@@ -1,36 +1,28 @@
 """Línea de comandos: argumentos y orquestación.
 
-    udemy <url|slug|id> [--txt] [--lang es,en] [--out DIR] [--width N]
+    udemy <url|slug|id> [--format md|txt] [--single] [--update] [--lang es,en] [--out DIR]
     udemy --list
 """
 
 import argparse
 import os
 import sys
-import time
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import __version__
-from .captions import parse_vtt, pick_caption
 from .client import Client, ensure_login
-from .courses import course_title, list_courses, resolve_course_id
+from .courses import course_info, list_courses, resolve_course_id
 from .curriculum import fetch_curriculum
+from .download import download_course
 from .errors import UdemyError
+from .manifest import MANIFEST_NAME, Manifest
 from .portal import choose_portal, host_from_ref, token_cookie
-from .render.txt import cues_to_text, single_file, single_part
-from .util import safe_name
+from .render import markdown, txt
+from .render.common import RenderOptions
+from .util import fs_path, safe_name
 
 PROFILE_DIR = Path.home() / ".cache" / "udemy-transcripts-profile"
 DEFAULT_OUT = Path.home() / "Udemy-Transcripts"
-
-
-@dataclass
-class Stats:
-    saved: int = 0
-    no_captions: int = 0
-    failed: int = 0
-    parts: list = field(default_factory=list)   # bloques para el archivo único
 
 
 def build_parser():
@@ -49,10 +41,23 @@ def build_parser():
                     help="idiomas del subtítulo por orden de preferencia (default es,en)")
     ap.add_argument("--out", default=None,
                     help="carpeta base (default: $UDEMY_OUT o ~/Udemy-Transcripts)")
+    ap.add_argument("--format", choices=("md", "txt"), default="md",
+                    help="formato de salida: md (Markdown, default) o txt")
+    ap.add_argument("--single", action="store_true",
+                    help="todo el curso en UN solo archivo (con tabla de contenidos)")
     ap.add_argument("--txt", action="store_true",
-                    help="todo el curso en UN solo .txt (en vez de uno por video)")
+                    help="el modo clásico: equivale a --single --format txt")
+    ap.add_argument("--update", action="store_true",
+                    help="solo descarga lecciones nuevas o con subtítulo cambiado y "
+                         "reanuda una descarga cortada (usa .udemy-transcripts.json)")
+    ap.add_argument("--no-timestamps", action="store_true",
+                    help="sin marcas de tiempo al inicio de los párrafos")
+    ap.add_argument("--ts-every", type=int, default=0, metavar="SEG",
+                    help="una marca de tiempo como mucho cada SEG segundos "
+                         "(default 0: una por párrafo)")
     ap.add_argument("--width", type=int, default=100,
-                    help="ancho de línea del texto; 0 = sin ajustar (default 100)")
+                    help="ancho de línea del texto (solo --format txt); 0 = sin ajustar "
+                         "(default 100)")
     ap.add_argument("--headless", action="store_true",
                     help="(NO recomendado: Udemy bloquea el modo headless con Cloudflare)")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -63,39 +68,15 @@ def parse_langs(value):
     return [x.strip() for x in (value or "").split(",") if x.strip()]
 
 
-def download_transcripts(client, sections, langs, course_dir=None, width=100,
-                         single=False, log=print, pause=0.15):
-    """Baja y guarda el subtítulo de cada lección de vídeo."""
-    videos = [(s, lec) for s in sections for lec in s.lectures if lec.is_video]
-    total, stats = len(videos), Stats()
-    for n, (section, lec) in enumerate(videos, 1):
-        label = f"[{n}/{total}] {section.title} › {lec.number} - {lec.title}"
-        caption, preferred = pick_caption(lec.captions, langs)
-        if not caption:
-            log(f"  – {label}: sin subtítulos")
-            stats.no_captions += 1
-            continue
-        result = client.download_text(caption["url"], "el subtítulo")
-        if not result.ok:
-            hint = " (¿URL caducada?)" if result.status in (401, 403) else ""
-            log(f"  ✗ {label}: no se pudo bajar el subtítulo (HTTP {result.status}){hint}")
-            stats.failed += 1
-            continue
-        text = cues_to_text(parse_vtt(result.text), width)
-        locale = caption.get("locale_id")
-        note = "" if preferred else f" — usando {locale}, no hay {langs[0]}"
-        if single:
-            stats.parts.append(single_part(lec.number, section.title,
-                                           safe_name(lec.title), text))
-        else:
-            folder = course_dir / section.dirname
-            folder.mkdir(parents=True, exist_ok=True)
-            name = f"{lec.number} - {safe_name(lec.title)}.txt"
-            (folder / name).write_text(text + "\n", encoding="utf-8")
-        log(f"  ✓ {label}  ({locale}){note}")
-        stats.saved += 1
-        time.sleep(pause)
-    return stats
+def options_from_args(args):
+    """Opciones de render y modo (archivo único) a partir de los argumentos."""
+    fmt, single = args.format, args.single
+    if args.txt:                      # alias del modo de siempre
+        fmt, single = "txt", True
+    if args.width < 0 or args.ts_every < 0:
+        raise UdemyError("--width y --ts-every no pueden ser negativos.")
+    return RenderOptions(format=fmt, timestamps=not args.no_timestamps,
+                         ts_every=args.ts_every, width=args.width), single
 
 
 def _launch(pw, args, portal):
@@ -119,13 +100,15 @@ def _import_playwright():
 
 
 def run(args):
+    opts, single = options_from_args(args)
     if args.headless:
         print("⚠ Aviso: Udemy suele bloquear el modo headless (Cloudflare). "
               "Si falla, ejecútalo sin --headless.")
+    if args.update and single and not args.do_list:
+        print("⚠ Aviso: --update no aplica a --single/--txt; se regenera el archivo completo.")
     langs = parse_langs(args.lang)
     portal = choose_portal(args.course, args.business)
-    if args.business and host_from_ref(args.course) and \
-            host_from_ref(args.course) != choose_portal(None, args.business).host:
+    if args.business and host_from_ref(args.course) and             host_from_ref(args.course) != choose_portal(None, args.business).host:
         print(f"⚠ Aviso: la URL apunta a {portal.host}; se ignora --business "
               f"{args.business}.")
     if portal.is_business:
@@ -150,35 +133,49 @@ def run(args):
 
             print("• Resolviendo curso…")
             course_id = resolve_course_id(client, args.course)
-            title = course_title(client, course_id)
-            print(f"  → {title} (id {course_id})")
+            course = course_info(client, course_id)
+            print(f"  → {course.title} (id {course_id})")
 
             base = Path(args.out) if args.out else Path(
                 os.environ.get("UDEMY_OUT") or DEFAULT_OUT)
             base.mkdir(parents=True, exist_ok=True)
-            course_dir = base / safe_name(title)
-            if not args.txt:
-                course_dir.mkdir(parents=True, exist_ok=True)
+            course_dir = base / safe_name(course.title)
 
             print("• Leyendo temario…")
             sections = fetch_curriculum(client, course_id)
             if not any(lec.is_video for s in sections for lec in s.lectures):
                 raise UdemyError("El curso no tiene lecciones de vídeo.")
 
-            stats = download_transcripts(client, sections, langs, course_dir,
-                                         args.width, args.txt)
+            manifest = None
+            if not single:
+                course_dir.mkdir(parents=True, exist_ok=True)
+                manifest = Manifest.load(course_dir / MANIFEST_NAME, course_id)
+            stats = download_course(client, course, sections, langs, opts,
+                                    course_dir, single, args.update, manifest)
         finally:
             context.close()
 
-    print(f"\n{'✓' if stats.saved else '✗'} Listo: {stats.saved} transcripciones, "
+    kept = f", {stats.up_to_date} sin cambios" if args.update else ""
+    print(f"\n{'✓' if stats.ok else '✗'} Listo: {stats.saved} transcripciones{kept}, "
           f"{stats.no_captions} sin subtítulos, {stats.failed} con error.")
-    if args.txt and stats.saved:
-        target = base / f"{safe_name(title)}.txt"
-        target.write_text(single_file(title, stats.parts), encoding="utf-8")
+    if stats.orphans:
+        print(f"  ⚠ {len(stats.orphans)} archivo(s) antiguo(s) se conservan "
+              "(la lección cambió de nombre o de sección).")
+    if single and stats.saved:
+        target = base / f"{safe_name(course.title)}.{opts.ext}"
+        render = markdown if opts.format == "md" else txt
+        try:
+            fs_path(target).write_text(render.single_document(course, stats.items),
+                                       encoding="utf-8")
+        except OSError as exc:
+            raise UdemyError(f"No pude escribir {target}: {exc}")
         print(f"  Archivo: {target}")
-    elif stats.saved:
+    elif stats.ok:
         print(f"  Carpeta: {course_dir}")
-    return 0 if stats.saved else 1
+    if stats.failed and not args.update:
+        print("  Los errores suelen ser transitorios: repite con --update para completar "
+              "solo lo que falta.")
+    return 0 if stats.ok else 1
 
 
 def main(argv=None):
@@ -197,7 +194,8 @@ def main(argv=None):
         print(f"\n✗ {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("\n✗ Interrumpido.", file=sys.stderr)
+        print("\n✗ Interrumpido. Lo ya descargado se conserva: continúa con --update.",
+              file=sys.stderr)
         return 130
 
 

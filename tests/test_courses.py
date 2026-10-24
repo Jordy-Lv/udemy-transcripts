@@ -1,7 +1,7 @@
 import pytest
 
 from conftest import FakePage, js
-from udemy_transcripts.courses import (CourseRef, course_title, extract_course_id_candidates,
+from udemy_transcripts.courses import (CourseRef, course_info, extract_course_id_candidates,
                                        parse_course_ref, resolve_course_id, url_matches_slug)
 from udemy_transcripts.errors import AccessDeniedError, NotLoggedInError, UdemyError
 
@@ -86,8 +86,17 @@ def test_resolve_propagates_login_errors(make_client):
         resolve_course_id(make_client(page), "mi-curso")
 
 
-def test_course_title(make_client):
-    assert course_title(make_client(FakePage([js(200, {"title": "Java"})])), 1) == "Java"
-    assert course_title(make_client(FakePage([js(200, {})])), 1) == "curso-1"
+def test_course_info(make_client):
+    info = course_info(make_client(FakePage([js(200, {"title": "Java", "url": "/course/java-spring/"})])), 1)
+    assert (info.id, info.title, info.slug, info.base) == ("1", "Java", "java-spring", "https://www.udemy.com")
+    assert info.url == "https://www.udemy.com/course/java-spring/"
+    assert info.lecture_url(55) == "https://www.udemy.com/course/java-spring/learn/lecture/55"
+    assert info.lecture_url(55, 255.9).endswith("/lecture/55?start=255")
+    assert info.lecture_url(None) is None
+
+
+def test_course_info_fallbacks_and_errors(make_client):
+    info = course_info(make_client(FakePage([js(200, {})])), 1)
+    assert (info.title, info.slug, info.url, info.lecture_url(5)) == ("curso-1", None, None, None)
     with pytest.raises(AccessDeniedError):
-        course_title(make_client(FakePage([js(403, {"detail": "x"})])), 1)
+        course_info(make_client(FakePage([js(403, {"detail": "x"})])), 1)

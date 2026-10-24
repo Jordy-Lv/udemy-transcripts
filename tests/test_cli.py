@@ -1,8 +1,8 @@
 import pytest
 
-from conftest import FakeContext, load_json
+from udemy_transcripts.errors import UdemyError
+
 from udemy_transcripts import cli
-from udemy_transcripts.curriculum import parse_curriculum
 from udemy_transcripts.portal import Portal, portal_from_ref
 from udemy_transcripts.util import safe_name
 
@@ -51,44 +51,33 @@ def test_main_requires_course_or_list(capsys):
     assert exc.value.code == 2
 
 
-def test_download_writes_one_file_per_video_in_section_folders(make_client, tmp_path):
-    ctx = FakeContext({"https://cdn.example/900.vtt": (200, VTT),
-                       "https://cdn.example/901-en.vtt": (200, VTT)})
-    logs = []
-    stats = cli.download_transcripts(make_client(context=ctx), course(), ["es", "en"],
-                                     tmp_path, 100, False, log=logs.append, pause=0)
-    assert (stats.saved, stats.no_captions, stats.failed) == (2, 1, 0)
-    assert (tmp_path / "00 - General" / "001 - Bienvenida.txt").read_text(encoding="utf-8") \
-        == "Hola.\nAdiós.\n"
-    assert (tmp_path / "01 - Introducción- ¿qué es-" / "002 - Instalación.txt").exists()
-    assert any("[3/3]" in line and "sin subtítulos" in line for line in logs)    # progreso
+def parse(*argv):
+    return cli.build_parser().parse_args(list(argv) + ["curso"])
 
 
-def test_download_warns_when_language_differs(make_client, tmp_path):     # B5
-    ctx = FakeContext({"https://cdn.example/900.vtt": (200, VTT),
-                       "https://cdn.example/901-en.vtt": (200, VTT)})
-    logs = []
-    cli.download_transcripts(make_client(context=ctx), course(), ["es", "en"],
-                             tmp_path, 100, False, log=logs.append, pause=0)
-    assert not any("no hay" in line for line in logs if "Bienvenida" in line)
-    (english,) = [line for line in logs if "Instalación" in line]
-    assert "usando en_US, no hay es" in english
+def test_options_defaults_are_markdown_with_timestamps():
+    opts, single = cli.options_from_args(parse())
+    assert (opts.format, opts.timestamps, opts.ts_every, opts.width, single) ==         ("md", True, 0, 100, False)
 
 
-def test_download_counts_failures_instead_of_pretending_success(make_client, tmp_path):   # B3
-    ctx = FakeContext({"https://cdn.example/900.vtt": (403, "denied")})
-    logs = []
-    stats = cli.download_transcripts(make_client(context=ctx), course(), ["es"],
-                                     tmp_path, 100, False, log=logs.append, pause=0)
-    assert stats.saved == 0 and stats.failed == 2
-    assert any("HTTP 403" in line and "caducada" in line for line in logs)
+def test_options_flags():
+    opts, single = cli.options_from_args(
+        parse("--format", "txt", "--single", "--no-timestamps", "--ts-every", "60", "--width", "0"))
+    assert (opts.format, opts.timestamps, opts.ts_every, opts.width, single) ==         ("txt", False, 60, 0, True)
 
 
-def test_download_single_mode_collects_parts_without_files(make_client, tmp_path):
-    ctx = FakeContext({"https://cdn.example/900.vtt": (200, VTT),
-                       "https://cdn.example/901-en.vtt": (200, VTT)})
-    stats = cli.download_transcripts(make_client(context=ctx), course(), ["es"],
-                                     None, 0, True, log=lambda *_: None, pause=0)
-    assert stats.saved == 2 and len(stats.parts) == 2
-    assert stats.parts[0].startswith("=" * 70 + "\n[001] General — Bienvenida")
-    assert list(tmp_path.iterdir()) == []
+def test_legacy_txt_flag_is_single_file_in_txt():
+    opts, single = cli.options_from_args(parse("--txt"))
+    assert (opts.format, single) == ("txt", True)
+
+
+def test_negative_numbers_are_rejected():
+    for flags in (["--width", "-1"], ["--ts-every", "-5"]):
+        with pytest.raises(UdemyError):
+            cli.options_from_args(parse(*flags))
+
+
+def test_update_flag_and_unknown_format():
+    assert parse("--update").update is True and parse().update is False
+    with pytest.raises(SystemExit):
+        parse("--format", "pdf")

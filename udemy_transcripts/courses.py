@@ -2,6 +2,8 @@
 
 import re
 from collections import namedtuple
+from dataclasses import dataclass
+from typing import Optional
 
 from .errors import AccessDeniedError, ApiError, NotFoundError, UdemyError
 
@@ -96,8 +98,29 @@ def resolve_course_id(client, arg):
                      "id y pásalo directo:  udemy <id>.")
 
 
-def course_title(client, course_id):
-    info = client.get_json(
-        f"{client.portal.api}/courses/{course_id}/?fields%5Bcourse%5D=title",
+@dataclass
+class CourseInfo:
+    id: str
+    title: str
+    slug: Optional[str]
+    base: str                 # https://<host> del portal
+
+    @property
+    def url(self):
+        return f"{self.base}/course/{self.slug}/" if self.slug else None
+
+    def lecture_url(self, lecture_id, start=None):
+        """Enlace a una lección (y a un segundo concreto con `start`)."""
+        if not (self.slug and lecture_id):
+            return None
+        url = f"{self.base}/course/{self.slug}/learn/lecture/{lecture_id}"
+        return url if start is None else f"{url}?start={int(start)}"
+
+
+def course_info(client, course_id):
+    data = client.get_json(
+        f"{client.portal.api}/courses/{course_id}/?fields%5Bcourse%5D=title,url",
         "el curso")
-    return info.get("title") or f"curso-{course_id}"
+    m = re.search(r"/course/([^/?#]+)", data.get("url") or "")
+    return CourseInfo(str(course_id), data.get("title") or f"curso-{course_id}",
+                      m.group(1) if m else None, client.portal.base)

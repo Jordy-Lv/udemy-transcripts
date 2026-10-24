@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.4.0 — Fase 3: salida pensada para estudiar
+
+### Cambios de comportamiento
+- **El formato por defecto ahora es Markdown** (`--format md`): un `.md` por lección con cabecera
+  YAML y un `README.md` índice por curso. Para el comportamiento anterior usa `--format txt`; el
+  modo de archivo único de siempre sigue siendo `--txt` (= `--single --format txt`).
+- La salida ahora trae **párrafos** (separados por una línea en blanco) y **marcas de tiempo**
+  `[mm:ss]` al inicio de cada uno. `--no-timestamps` las quita; en `.txt` el resto del texto es el de
+  siempre (una oración por línea), salvo la línea en blanco entre párrafos.
+- El archivo único lleva una tabla de contenidos al inicio.
+
+### Novedades
+- **Markdown**: cabecera YAML (`curso`, `seccion`, `leccion`, `numero`, `url`, `duracion`, `idioma`,
+  `subtitulo_automatico`), `README.md` con secciones, duración e idioma de cada lección, y escape de los
+  caracteres especiales de Markdown.
+- **Marcas de tiempo enlazadas**: `[04:15](…/learn/lecture/<id>?start=255)` abre el vídeo en ese segundo.
+  `--ts-every SEG` las espacia; `--no-timestamps` las quita.
+- **Párrafos naturales** a partir de los tiempos de los cues: corte tras una pausa de 2,5 s o al pasar
+  de ~400 caracteres en un final de oración. Los valores salen de medir 4 178 cues reales (con 1,5 s / 500
+  el 18 % de los párrafos era de una sola frase).
+- **`--update` y reanudación** con `<curso>/.udemy-transcripts.json` (archivo, idioma, huella del
+  subtítulo, hash del VTT, opciones de render). Una lección se omite solo si nada de lo que afecta al
+  archivo cambió; el manifest se guarda tras cada lección, así que una descarga cortada se reanuda con
+  el mismo comando. Las lecciones renombradas se reescriben y se conserva el archivo anterior.
+- `--format`, `--single`.
+
+### Correcciones
+- En Windows, una carpeta de salida profunda con títulos largos superaba los 260 caracteres y la descarga
+  fallaba con un traceback (`FileNotFoundError`): ahora se usan rutas extendidas y un fallo de escritura
+  da un error claro.
+
+### Interno
+- Nuevos módulos `paragraphs`, `manifest`, `download`, `render/common`, `render/markdown`;
+  `course_title` pasa a `course_info` (título y slug). 150 tests sin red.
+
+### Verificado en vivo (seti.udemy.com, 2026-10-24)
+- Curso de 266 lecciones: Markdown + índice, `--single`, `--txt --ts-every 60`.
+- `--update`: 266 lecciones sin cambios en 6 s y sin descargar nada; regenera solo lo borrado o lo
+  afectado por un cambio de opciones.
+
 ## 0.3.0 — Fase 2: Udemy Business
 
 - **Portal de Business**: el host se toma de la URL (`https://<org>.udemy.com/...`) y todas las

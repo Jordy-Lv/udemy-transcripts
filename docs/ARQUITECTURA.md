@@ -1,21 +1,24 @@
 # Arquitectura de udemy-transcripts
 
-> Estado: **Fase 2 (0.3.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
+> Estado: **Fase 3 (0.4.0)**. El diseño original de un solo script (`9a21915`) se reorganizó
 > en un paquete; el plan de cambios está en [PLAN.md](PLAN.md) y la API en [API.md](API.md).
 
 ## Estructura
 
 ```
 udemy_transcripts/
-  cli.py          argumentos, orquestación, descarga y guardado
+  cli.py          argumentos y orquestación (sesión, curso, temario, descarga, archivo único)
   client.py       Client (navegador + portal), ApiResult, reintentos, errores por status, login
   portal.py       Portal: host (www / <org>.udemy.com) y URLs base
   courses.py      lista de cursos, URL/slug/id → course_id (validado con la API)
   curriculum.py   modelo Section/Lecture y lectura del temario
   captions.py     parser WebVTT por bloques → Cue(start, end, text); elección de idioma
-  render/txt.py   texto plano: una oración por línea, ajuste de ancho, archivo único
+  paragraphs.py   cues → párrafos (pausa 2,5 s / ~400 car.) y qué párrafos llevan marca de tiempo
+  manifest.py     .udemy-transcripts.json: estado por lección para --update y reanudar
+  download.py     bucle de descarga: elige subtítulo, omite lo vigente, renderiza y escribe
+  render/         common (opciones, tiempos), markdown (lección, README índice, archivo único), txt
   errors.py       UdemyError y subclases (el mensaje se muestra al usuario)
-  util.py         safe_name
+  util.py         safe_name y fs_path (rutas de más de 259 caracteres en Windows)
 udemy_transcripts.py   envoltorio: `python udemy_transcripts.py` sigue funcionando
 tests/                 pytest sin red (FakePage / FakeContext en conftest.py)
 ```
@@ -25,7 +28,7 @@ Solo depende de la librería estándar + **Playwright** (importado de forma dife
 ## Flujo
 
 ```
-udemy <url|slug|id> [--txt] [--lang] [--out] ...
+udemy <url|slug|id> [--format md|txt] [--single] [--update] [--lang] [--out] ...
    │
    ├─ 1. Portal: host de la URL › --business/UDEMY_BUSINESS › www.udemy.com (portal.choose_portal)
    ├─ 2. Chromium con perfil persistente (~/.cache/udemy-transcripts-profile), ventana visible
@@ -33,9 +36,11 @@ udemy <url|slug|id> [--txt] [--lang] [--out] ...
    ├─ 3. ensure_login()      GET users/me  → si no hay sesión, login manual + ENTER
    ├─ 4. resolve_course_id() subscribed-courses; si no, landing + candidatos validados con courses/<id>/
    ├─ 5. fetch_curriculum()  subscriber-curriculum-items (paginado) → [Section[Lecture]]
-   ├─ 6. por cada lección de vídeo:
-   │        pick_caption() → download_text(.vtt) → parse_vtt() → cues_to_text()
-   └─ 7. guarda  <out>/<curso>/<NN - sección>/<NNN - lección>.txt   (o <out>/<curso>.txt con --txt)
+   ├─ 6. por cada lección de vídeo (download.py):
+   │        pick_caption() → ¿vigente en el manifest? (--update) → download_text(.vtt)
+   │        → parse_vtt() → build_paragraphs() → render markdown|txt → escribe + manifest.save()
+   └─ 7. guarda  <out>/<curso>/<NN - sección>/<NNN - lección>.md|txt  + README.md + manifest
+                (o <out>/<curso>.md|txt con --single / --txt)
 ```
 
 ## Capa de red
@@ -56,5 +61,9 @@ Lo único que no cubren es el navegador real: ver la prueba manual de cada fase 
 
 ## Límites actuales
 
-1. El formato de salida es solo `.txt` (Markdown, marcas de tiempo y `--update` llegan en la Fase 3).
-2. El modo `--txt` escribe al final: una interrupción pierde lo acumulado (la reanudación llega con el manifest).
+1. `--single`/`--txt` escribe el archivo al final: una interrupción pierde lo acumulado, y
+   `--update` no aplica (hace falta el texto de todas las lecciones para recomponerlo).
+2. `--update` decide por la huella del subtítulo (`file_name` del CDN) sin descargarlo; si Udemy
+   cambiara el contenido sin cambiar ese nombre no lo detectaría (el hash del VTT se guarda, pero solo
+   como referencia).
+3. Los recursos (PDF, código, artículos) llegan en la Fase 4.

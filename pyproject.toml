@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "udemy-transcripts"
-version = "0.3.0"
+version = "0.4.0"
 description = "Descarga las transcripciones de los cursos de Udemy (personal y Business)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,7 +12,7 @@ requires-python = ">=3.8"
 dependencies = ["playwright"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pyyaml"]
 
 [project.scripts]
 udemy = "udemy_transcripts.cli:main"
