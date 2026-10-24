@@ -211,3 +211,12 @@ def test_merge_is_skipped_when_nothing_was_downloaded(make_client, tmp_path):
                                    job(merge=True, select=lambda s, lec: lec.index == 1),
                                    tmp_path, log=lambda *_: None)     # su subtítulo da 404
     assert stats.merged == [] and not (tmp_path / "Mi curso.md").exists()
+
+
+def test_section_headings_use_the_real_title_not_the_folder_name(course):
+    _, sections = collect(course, load_manifest(course))
+    assert sections[1].dirname == "01 - Introducción- ¿qué es-"
+    assert sections[1].heading == "01 - Introducción: ¿qué es?"
+    text = merge_course(course)[0].read_text(encoding="utf-8")
+    assert "## 01 - Introducción: ¿qué es?" in text and "- 01 - Introducción: ¿qué es?" in text
+    assert MergeSection(3, "03 - Algo").heading == "03 - Algo"

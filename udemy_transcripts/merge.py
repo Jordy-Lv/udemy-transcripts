@@ -53,6 +53,13 @@ class MergeSection:
     index: int
     dirname: str
     lessons: list = field(default_factory=list)
+    title: str = ""            # título real de la sección (el nombre de carpeta va sin «:» ni «?»)
+
+    @property
+    def heading(self):
+        """«01 - Introducción: ¿qué es?» (número de la carpeta + título real, si se conoce)."""
+        number = self.dirname.split(" - ", 1)[0]
+        return f"{number} - {self.title}" if self.title else self.dirname
 
     @property
     def words(self):
@@ -123,7 +130,8 @@ def collect(course_dir, manifest, select=None):
         meta, body = split_front_matter(item.path.read_text(encoding="utf-8"))
         title = title or meta.get("curso") or ""
         entry = item.entry
-        section = grouped.setdefault(item.dirname, MergeSection(item.section_index, item.dirname))
+        section = grouped.setdefault(item.dirname, MergeSection(
+            item.section_index, item.dirname, title=entry.get("section") or ""))
         lesson = MergeLesson(
             item.number, entry.get("title") or item.name, lesson_text(body, item.number),
             fmt_time(entry.get("duration")) if entry.get("kind") == "video"
@@ -161,13 +169,14 @@ def split_parts(sections, max_words):
         for lesson in section.lessons:
             if size and size + lesson.words > max_words:
                 if chunk:
-                    current.append(MergeSection(section.index, section.dirname, chunk))
+                    current.append(MergeSection(section.index, section.dirname, chunk,
+                                                section.title))
                     chunk = []
                 flush()
             chunk.append(lesson)
             size += lesson.words
         if chunk:
-            current.append(MergeSection(section.index, section.dirname, chunk))
+            current.append(MergeSection(section.index, section.dirname, chunk, section.title))
     flush()
     return parts
 
@@ -183,13 +192,13 @@ def render_part(title, url, sections, number=1, total=1, lessons_total=None):
                                         else ""))
     head += ["", "## Contenido", ""]
     for section in sections:
-        head.append(f"- {md_escape(section.dirname)}")
+        head.append(f"- {md_escape(section.heading)}")
         for lesson in section.lessons:
             dur = f" ({lesson.duration})" if lesson.duration else ""
             head.append(f"  - {md_escape(lesson.number + ' - ' + lesson.title)}{dur}")
     blocks = ["\n".join(head)]
     for section in sections:
-        blocks.append(f"## {md_escape(section.dirname)}")
+        blocks.append(f"## {md_escape(section.heading)}")
         blocks.extend(lesson.text for lesson in section.lessons)
     return "\n\n".join(blocks) + "\n"
 

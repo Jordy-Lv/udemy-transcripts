@@ -4,6 +4,7 @@
 #   powershell -ExecutionPolicy Bypass -File install.ps1                 instala (o actualiza)
 #   ... -WithAI          ademas instala el SDK de Anthropic (para --study api; Python 3.10+)
 #   ... -SkipBrowser     no descarga Chromium (ya lo tienes o lo haras luego)
+#   ... -DesktopShortcut ademas del acceso del Menu Inicio, crea uno en el Escritorio
 #   ... -Uninstall       borra el entorno y el comando (no toca tus descargas ni tu sesion)
 #   ... -AppDir RUTA -BinDir RUTA   cambia donde se instala (default %LOCALAPPDATA%\udemy-transcripts
 #                                   y %LOCALAPPDATA%\Microsoft\WindowsApps)
@@ -12,6 +13,7 @@ param(
     [string]$BinDir,
     [switch]$WithAI,
     [switch]$SkipBrowser,
+    [switch]$DesktopShortcut,
     [switch]$Uninstall
 )
 $ErrorActionPreference = "Stop"
@@ -32,9 +34,26 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) { throw "Fallo al $What (codigo $LASTEXITCODE)." }
 }
 
+$StartMenuLink = Join-Path ([Environment]::GetFolderPath("Programs")) "Udemy Transcripts.lnk"
+$DesktopLink   = Join-Path ([Environment]::GetFolderPath("Desktop")) "Udemy Transcripts.lnk"
+
+function New-MenuShortcut {
+    # Acceso directo que abre PowerShell directamente en el menu interactivo.
+    param([string]$Path, [string]$Exe)
+    $shell = New-Object -ComObject WScript.Shell
+    $link = $shell.CreateShortcut($Path)
+    $link.TargetPath = "powershell.exe"
+    $link.Arguments = "-NoLogo -ExecutionPolicy Bypass -Command `"[Console]::OutputEncoding=[Text.Encoding]::UTF8; & '$Exe' --menu`""
+    $link.WorkingDirectory = $env:USERPROFILE
+    $link.Description = "Menu interactivo de udemy-transcripts"
+    $link.Save()
+}
+
 if ($Uninstall) {
     Remove-Item $AppDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item (Join-Path $BinDir "udemy.cmd") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $BinDir "udemy-menu.cmd") -Force -ErrorAction SilentlyContinue
+    Remove-Item $StartMenuLink, $DesktopLink -Force -ErrorAction SilentlyContinue
     Write-Host "udemy-transcripts desinstalado." -ForegroundColor Green
     Write-Host "Se conservan tus descargas (~\Udemy-Transcripts) y tu sesion de Udemy"
     Write-Host "(~\.cache\udemy-transcripts-profile): borralos a mano si ya no los quieres."
@@ -96,6 +115,17 @@ if ($SkipBrowser) {
 $udemyExe = Join-Path $Venv "Scripts\udemy.exe"
 $cmd = "@echo off`r`n`"$udemyExe`" %*"
 Set-Content -Path (Join-Path $BinDir "udemy.cmd") -Value $cmd -Encoding ascii
+$menuCmd = "@echo off`r`n`"$udemyExe`" --menu"
+Set-Content -Path (Join-Path $BinDir "udemy-menu.cmd") -Value $menuCmd -Encoding ascii
+
+# acceso directo "Udemy Transcripts" (Menu Inicio y, si se pide, Escritorio) que abre el menu
+try {
+    New-MenuShortcut -Path $StartMenuLink -Exe $udemyExe
+    Write-Host "  - Acceso directo: Menu Inicio > Udemy Transcripts"
+    if ($DesktopShortcut) { New-MenuShortcut -Path $DesktopLink -Exe $udemyExe }
+} catch {
+    Write-Host "  - No pude crear el acceso directo ($($_.Exception.Message)); usa el comando udemy-menu." -ForegroundColor Yellow
+}
 
 $version = & $udemyExe --version
 Write-Host ""
@@ -106,7 +136,9 @@ if (-not $onPath) {
 }
 Write-Host ""
 Write-Host "Uso:"
+Write-Host "    udemy                 (abre el menu interactivo; tambien: udemy-menu)"
 Write-Host "    udemy --list"
 Write-Host "    udemy `"https://www.udemy.com/course/...`""
+Write-Host "    udemy --merge `"https://www.udemy.com/course/...`"   (ademas, un .md con todo el curso)"
 Write-Host "    udemy --resources --update `"https://www.udemy.com/course/...`""
 Write-Host "    udemy --help          (todas las opciones)"
